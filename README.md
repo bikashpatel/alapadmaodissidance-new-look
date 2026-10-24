@@ -101,3 +101,7 @@ robots.txt, sitemap.xml, site.webmanifest
 ## Photos
 
 The Guru's photos are currently taken from the printed brochure, so they're low resolution. To improve the gallery and profile, replace them with high-resolution images under the same names in `assets/img/` (`purnima-*.jpg` and `.webp`), or add new `gallery__item` entries to `gallery.html`.
+
+---
+
+Designed, developed & maintained by [ELARXSYS.COM](https://elarxsys.com).
