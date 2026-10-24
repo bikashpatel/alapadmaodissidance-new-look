@@ -20,6 +20,42 @@
     document.querySelectorAll('[data-requires-not="youtubeChannel"]').forEach(function (el) { el.hidden = true; });
   }
 
+  /* ---------- photos added from the admin panel (newest first) ---------- */
+  var grid = document.querySelector(".gallery");
+  if (grid && SITE.galleryEndpoint && window.fetch) {
+    fetch(SITE.galleryEndpoint, { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (items) {
+        if (!Array.isArray(items) || !items.length) return;
+        var frag = document.createDocumentFragment();
+        items.forEach(function (it) {
+          if (!it || typeof it.src !== "string" || !/^\/uploads\/[a-f0-9]+\.(jpg|png|webp)$/.test(it.src)) return;
+          var a = document.createElement("a");
+          a.className = "gallery__item gallery__item--new";
+          a.href = it.src;
+          a.setAttribute("data-lightbox", "gallery");
+          a.setAttribute("data-caption", it.caption || it.alt || "");
+          var fig = document.createElement("figure");
+          var img = document.createElement("img");
+          img.src = it.src;
+          img.alt = it.alt || "";
+          img.loading = "lazy";
+          img.decoding = "async";
+          if (it.width && it.height) { img.width = it.width; img.height = it.height; }
+          fig.appendChild(img);
+          if (it.caption) {
+            var cap = document.createElement("figcaption");
+            cap.textContent = it.caption;
+            fig.appendChild(cap);
+          }
+          a.appendChild(fig);
+          frag.appendChild(a);
+        });
+        grid.insertBefore(frag, grid.firstChild);
+      })
+      .catch(function () { /* keep the built-in photos */ });
+  }
+
   /* ---------- share: native share sheet, or copy the link ---------- */
   var btn = document.querySelector("[data-share]");
   if (!btn) return;

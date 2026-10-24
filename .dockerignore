@@ -1,14 +1,14 @@
-# keep the image to public website files only
+# the image needs only public/ and server/
 .git
-.gitignore
 .github
+.gitignore
 .dockerignore
+.env
+.env.*
+data
+node_modules
 Dockerfile
 docker-compose.yml
-README.md
-_headers
-_redirects
 *.md
 .DS_Store
 **/.DS_Store
-node_modules

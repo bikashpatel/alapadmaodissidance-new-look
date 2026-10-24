@@ -1063,6 +1063,25 @@ h2 em, h1 em { font-style: italic; color: var(--gold-600); font-weight: 500; }
   .site-footer__mantra span { letter-spacing: 0.26em; font-size: 0.68rem; }
 }
 
+/* announcement bar (admin-managed) */
+.announce {
+  position: fixed; inset: 0 0 auto 0; z-index: 120; display: flex; align-items: center; justify-content: center;
+  min-height: 42px; padding: 0.5rem 3.4rem; text-align: center; font-size: 0.92rem; color: var(--gold-100);
+  background: linear-gradient(90deg, var(--maroon-900), var(--maroon-700), var(--maroon-900));
+  border-bottom: 1px solid rgba(232, 207, 148, 0.35);
+}
+.announce__text { margin: 0; line-height: 1.45; }
+.announce__link { color: var(--gold-300); font-weight: 500; white-space: nowrap; }
+.announce__link:hover { color: var(--gold-200); }
+.announce__close {
+  position: absolute; right: 0.3rem; top: 50%; transform: translateY(-50%); display: grid; place-items: center;
+  width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--gold-200); cursor: pointer;
+}
+.announce__close:hover { background: rgba(255, 252, 245, 0.1); }
+.announce__close .icon { width: 1.1rem; height: 1.1rem; }
+.has-announce { padding-top: var(--announce-h, 42px); }
+.has-announce .site-header, .has-announce .mobile-nav { top: var(--announce-h, 42px); }
+
 /* floating WhatsApp */
 .float-whatsapp {
   position: fixed; right: clamp(1rem, 3vw, 1.6rem); bottom: clamp(1rem, 3vw, 1.6rem); z-index: 80;

@@ -123,9 +123,17 @@
   });
 
   /* ---------- lightbox: <a href="large.jpg" data-lightbox="gallery" data-caption="..."> ---------- */
-  var lbLinks = $$("a[data-lightbox]");
-  if (lbLinks.length) {
-    var lb = doc.createElement("div");
+  var lb = null;
+  doc.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("a[data-lightbox]");
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    if (!lb) buildLightbox();
+    openLightbox(a);
+  });
+  var openLightbox;
+  function buildLightbox() {
+    lb = doc.createElement("div");
     lb.className = "lightbox";
     lb.setAttribute("role", "dialog");
     lb.setAttribute("aria-modal", "true");
@@ -152,7 +160,7 @@
     }
     function open(a) {
       var name = a.getAttribute("data-lightbox");
-      group = lbLinks.filter(function (l) { return l.getAttribute("data-lightbox") === name && l.offsetParent !== null; });
+      group = $$("a[data-lightbox]").filter(function (l) { return l.getAttribute("data-lightbox") === name && l.offsetParent !== null; });
       if (!group.length) group = [a];
       lastFocus = a;
       show(group.indexOf(a));
@@ -173,9 +181,7 @@
       setInert(false);
       if (lastFocus) lastFocus.focus();
     }
-    lbLinks.forEach(function (a) {
-      a.addEventListener("click", function (e) { e.preventDefault(); open(a); });
-    });
+    openLightbox = open;
     $(".lightbox__close", lb).addEventListener("click", close);
     $(".lightbox__prev", lb).addEventListener("click", function () { show(idx - 1); });
     $(".lightbox__next", lb).addEventListener("click", function () { show(idx + 1); });
@@ -289,6 +295,32 @@
     });
     return lines.join("\n");
   }
+  function esc(v) {
+    return String(v).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
+  }
+  function enquiryData(form) {
+    var data = { page: window.location.pathname };
+    $$("input, select, textarea", form).forEach(function (el) {
+      if (!el.name || el.closest(".hp-field")) return;
+      if ((el.type === "radio" || el.type === "checkbox") && !el.checked) return;
+      data[el.name] = (el.value || "").trim();
+    });
+    var hp = form.querySelector(".hp-field input");
+    if (hp) data.website = hp.value;
+    return data;
+  }
+  function recordEnquiry(form) {
+    return fetch(SITE.enquiryEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(enquiryData(form))
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (res) {
+        if (!r.ok) throw new Error(res.error || "failed");
+        return res;
+      });
+    });
+  }
   function setStatus(form, type, html) {
     var box = $(".form__status", form);
     if (!box) return;
@@ -316,6 +348,35 @@
       var message = buildMessage(form);
       var nameEl = form.querySelector('[name="name"]');
       var subject = "Odissi class enquiry" + (nameEl && nameEl.value ? ": " + nameEl.value.trim() : "");
+
+      // WhatsApp chosen explicitly: open it straight away (popup blockers need this to be synchronous),
+      // and keep a copy in the admin inbox in the background
+      if (via === "whatsapp" && SITE.whatsapp) {
+        window.open(waLink(message), "_blank", "noopener");
+        if (SITE.enquiryEndpoint) recordEnquiry(form).catch(function () {});
+        setStatus(form, "success", "<strong>WhatsApp is opening</strong> with your enquiry pre-filled. Just press send.");
+        return;
+      }
+
+      if (SITE.enquiryEndpoint && window.fetch) {
+        var sendBtn = e.submitter;
+        if (sendBtn) { sendBtn.disabled = true; sendBtn.setAttribute("aria-busy", "true"); }
+        var notify = SITE.web3formsKey ? { access_key: SITE.web3formsKey, subject: subject, from_name: SITE.name, message: message } : null;
+        recordEnquiry(form).then(function () {
+          if (notify) {
+            fetch("https://api.web3forms.com/submit", {
+              method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(notify)
+            }).catch(function () {});
+          }
+          form.reset();
+          setStatus(form, "success", "<strong>Thank you.</strong> Your enquiry has reached us and we will get back to you shortly.");
+        }).catch(function (err) {
+          var alt = SITE.whatsapp ? " You can also reach us on WhatsApp." : SITE.email ? " You can also email us at <a href=\"mailto:" + esc(SITE.email) + "\">" + esc(SITE.email) + "</a>." : "";
+          var msg = err && err.message && err.message !== "failed" && err.message !== "Failed to fetch" ? esc(err.message) + "." : "Sorry, the enquiry could not be sent.";
+          setStatus(form, "error", msg.replace(/\.\.$/, ".") + alt);
+        }).then(function () { if (sendBtn) { sendBtn.disabled = false; sendBtn.removeAttribute("aria-busy"); } });
+        return;
+      }
 
       if (!via && SITE.web3formsKey) {
         var data = { access_key: SITE.web3formsKey, subject: subject, from_name: SITE.name, message: message };
@@ -346,12 +407,55 @@
       }
       if (SITE.email) {
         window.location.href = "mailto:" + SITE.email + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(message);
-        setStatus(form, "success", "<strong>Your email app is opening</strong> with the enquiry pre-filled. If nothing happens, write to us at <a href=\"mailto:" + SITE.email + "\">" + SITE.email + "</a>.");
+        setStatus(form, "success", "<strong>Your email app is opening</strong> with the enquiry pre-filled. If nothing happens, write to us at <a href=\"mailto:" + esc(SITE.email) + "\">" + esc(SITE.email) + "</a>.");
         return;
       }
       setStatus(form, "error", "Online enquiries are being set up. Please check back soon.");
     });
   });
+
+  /* ---------- announcement bar (set from the admin panel) ---------- */
+  var ann = SITE.announcement;
+  if (ann && ann.text) {
+    var annKey = "alp-ann-" + ann.text.length + "-" + ann.text.slice(0, 24);
+    var dismissed = false;
+    try { dismissed = window.sessionStorage.getItem(annKey) === "1"; } catch (_) { /* storage unavailable */ }
+    if (!dismissed) {
+      var bar = doc.createElement("div");
+      bar.className = "announce";
+      bar.setAttribute("role", "region");
+      bar.setAttribute("aria-label", "Announcement");
+      var text = doc.createElement("p");
+      text.className = "announce__text";
+      text.appendChild(doc.createTextNode(ann.text));
+      if (ann.linkUrl) {
+        var link = doc.createElement("a");
+        link.className = "announce__link";
+        link.href = ann.linkUrl;
+        link.textContent = ann.linkText || "Learn more";
+        text.appendChild(doc.createTextNode(" "));
+        text.appendChild(link);
+      }
+      var closeBtn = doc.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "announce__close";
+      closeBtn.setAttribute("aria-label", "Dismiss announcement");
+      closeBtn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#close"></use></svg>';
+      bar.appendChild(text);
+      bar.appendChild(closeBtn);
+      doc.body.insertBefore(bar, doc.body.firstChild);
+      var syncBar = function () { root.style.setProperty("--announce-h", bar.offsetHeight + "px"); };
+      doc.body.classList.add("has-announce");
+      syncBar();
+      window.addEventListener("resize", syncBar);
+      closeBtn.addEventListener("click", function () {
+        bar.remove();
+        doc.body.classList.remove("has-announce");
+        window.removeEventListener("resize", syncBar);
+        try { window.sessionStorage.setItem(annKey, "1"); } catch (_) { /* ignore */ }
+      });
+    }
+  }
 
   /* ---------- misc ---------- */
   $$("[data-year]").forEach(function (el) { el.textContent = new Date().getFullYear(); });

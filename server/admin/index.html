@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="referrer" content="same-origin">
+  <title>Admin | Alapadma Odissi Dance Academy</title>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cinzel:wght@500;600&family=Cormorant+Garamond:ital,wght@0,600;1,500&family=Jost:wght@400;500&display=swap">
+  <link rel="stylesheet" href="admin.css">
+  <script src="admin.js" defer></script>
+</head>
+<body>
+  <!-- Sign in -->
+  <main class="login" id="login" hidden>
+    <form class="login__card" id="login-form" novalidate>
+      <img class="login__logo" src="/assets/img/logo-240.webp" width="120" height="145" alt="">
+      <h1 class="login__title">Alapadma</h1>
+      <p class="login__sub">Website admin</p>
+      <label class="field">
+        <span class="field__label">Password</span>
+        <input type="password" name="password" id="login-password" autocomplete="current-password" required>
+      </label>
+      <p class="form-error" id="login-error" role="alert" hidden></p>
+      <button class="btn btn--primary btn--block" type="submit">Sign in</button>
+      <p class="login__foot">This area is for the academy only.</p>
+    </form>
+  </main>
+
+  <!-- App -->
+  <div class="app" id="app" hidden>
+    <aside class="sidebar">
+      <div class="sidebar__brand">
+        <img src="/assets/img/logo-header.webp" width="40" height="48" alt="">
+        <div><strong>Alapadma</strong><span>Website admin</span></div>
+      </div>
+      <nav class="sidebar__nav" aria-label="Admin">
+        <a href="#/dashboard" data-view="dashboard"><span class="ico" aria-hidden="true">◈</span>Dashboard</a>
+        <a href="#/enquiries" data-view="enquiries"><span class="ico" aria-hidden="true">✉</span>Enquiries <span class="badge" id="nav-new" hidden></span></a>
+        <a href="#/gallery" data-view="gallery"><span class="ico" aria-hidden="true">▣</span>Gallery</a>
+        <a href="#/settings" data-view="settings"><span class="ico" aria-hidden="true">⚙</span>Settings</a>
+        <a href="#/account" data-view="account"><span class="ico" aria-hidden="true">⚿</span>Account</a>
+      </nav>
+      <div class="sidebar__foot">
+        <a class="sidebar__site" href="/" target="_blank" rel="noopener">View website ↗</a>
+        <button class="btn btn--ghost btn--block" type="button" id="logout">Sign out</button>
+      </div>
+    </aside>
+    <main class="main" id="main" tabindex="-1">
+      <header class="main__head">
+        <h1 id="view-title">Dashboard</h1>
+        <div class="main__actions" id="view-actions"></div>
+      </header>
+      <div id="view" class="view"></div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

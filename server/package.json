@@ -1,0 +1,13 @@
+{
+  "name": "alapadma-odissi-dance-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web server and admin panel for the Alapadma Odissi Dance Academy website",
+  "main": "server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js",
+    "set-password": "node set-password.js"
+  },
+  "license": "UNLICENSED"
+}
