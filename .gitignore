@@ -4,4 +4,4 @@ node_modules/
 *.log
 .env
 # runtime data: settings, enquiries (personal data), uploads, admin password hash
-data/
+/data/
