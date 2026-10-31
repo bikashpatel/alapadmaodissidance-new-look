@@ -22,6 +22,7 @@ const vm = require("node:vm");
 const net = require("node:net");
 const { openStores } = require("./lib/store");
 const { hashPassword, verifyPassword, generatePassword, Sessions, RateLimiter, MIN_PASSWORD_LENGTH } = require("./lib/auth");
+const youtube = require("./lib/youtube");
 
 const ROOT = path.resolve(__dirname, "..");
 const PORT = Number(process.env.PORT) || 8080;
@@ -90,7 +91,7 @@ const DEFAULTS = loadDefaultSettings();
 /* ==========================================================================
    Settings
    ========================================================================== */
-const SETTING_FIELDS = ["phone", "whatsapp", "email", "address", "hours", "youtubeChannel", "youtubeVideos", "instagram", "facebook", "web3formsKey", "announcement"];
+const SETTING_FIELDS = ["phone", "whatsapp", "email", "address", "mapQuery", "mapLink", "hours", "youtubeChannel", "youtubeChannelId", "youtubeVideos", "instagram", "facebook", "web3formsKey", "announcement"];
 
 function currentSettings() {
   const saved = store.settings.read();
@@ -109,6 +110,7 @@ function publicSiteConfig() {
     announcement: s.announcement.enabled && s.announcement.text ? s.announcement : null,
     enquiryEndpoint: "/api/enquiries",
     galleryEndpoint: "/api/gallery",
+    youtubeEndpoint: "/api/youtube",
   });
 }
 
@@ -153,8 +155,16 @@ function validateSettings(input) {
   out.email = str(input.email, 150);
   if (out.email && !EMAIL_RE.test(out.email)) throw new ValidationError("Email address looks incorrect");
   out.address = str(input.address, 300);
+  out.mapQuery = str(input.mapQuery, 200);
+  out.mapLink = cleanUrl(input.mapLink);
   out.hours = str(input.hours, 200);
   out.youtubeChannel = cleanUrl(input.youtubeChannel);
+  if (out.youtubeChannel) {
+    out.youtubeChannel = youtube.normaliseChannelUrl(out.youtubeChannel);
+    if (!/^https:\/\/(www\.)?youtube\.com\/(@[\w.-]+|channel\/UC[\w-]{22}|c\/[\w.-]+|user\/[\w.-]+)$/.test(out.youtubeChannel)) {
+      throw new ValidationError("YouTube channel should look like https://www.youtube.com/@yourchannel");
+    }
+  }
   out.instagram = cleanUrl(input.instagram);
   out.facebook = cleanUrl(input.facebook);
   out.web3formsKey = str(input.web3formsKey, 64);
@@ -217,10 +227,49 @@ function publicGallery() {
 }
 
 /* ==========================================================================
+   YouTube: latest videos from the channel, refreshed hourly
+   ========================================================================== */
+const YT_TTL_MS = 60 * 60 * 1000;
+const YT_RETRY_MS = 5 * 60 * 1000;
+const YT_CACHE_FILE = path.join(DATA_DIR, "youtube-cache.json");
+const YT_SNAPSHOT_FILE = path.join(PUBLIC_DIR, "assets/data/youtube.json");
+const ytCache = { at: 0, id: "", data: null, inflight: null };
+
+function readJsonFile(file) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch (_) { return null; }
+}
+
+function youtubeFeed() {
+  const s = currentSettings();
+  const id = s.youtubeChannelId;
+  const empty = { channelUrl: s.youtubeChannel || "", channelId: id || "", videos: [] };
+  if (!id) return Promise.resolve(empty);
+  if (ytCache.id === id && ytCache.data && Date.now() - ytCache.at < YT_TTL_MS) return Promise.resolve(ytCache.data);
+  if (ytCache.inflight) return ytCache.inflight;
+  ytCache.inflight = youtube.fetchChannelVideos(id)
+    .then(videos => {
+      const data = { channelUrl: s.youtubeChannel, channelId: id, updated: new Date().toISOString(), videos };
+      Object.assign(ytCache, { at: Date.now(), id, data });
+      try { fs.writeFileSync(YT_CACHE_FILE, JSON.stringify(data)); } catch (_) { /* cache is optional */ }
+      return data;
+    })
+    .catch(err => {
+      console.warn("[youtube] feed unavailable:", err.message);
+      // last good copy, then the snapshot shipped with the site, as long as it is the same channel
+      const fallback = [ytCache.data, readJsonFile(YT_CACHE_FILE), readJsonFile(YT_SNAPSHOT_FILE)]
+        .find(d => d && d.channelId === id && Array.isArray(d.videos)) || empty;
+      Object.assign(ytCache, { at: Date.now() - YT_TTL_MS + YT_RETRY_MS, id, data: fallback });
+      return fallback;
+    })
+    .finally(() => { ytCache.inflight = null; });
+  return ytCache.inflight;
+}
+
+/* ==========================================================================
    HTTP helpers
    ========================================================================== */
 const INLINE_SCRIPT_HASH = "'sha256-GdI8OFcl8Ugd5Iy63/sFH0uY+b36cr4uk9eNu7HlZ3I='"; // the "js" class snippet in every page <head>
-const SITE_CSP = "default-src 'self'; script-src 'self' " + INLINE_SCRIPT_HASH + "; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://i.ytimg.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com; connect-src 'self' https://api.web3forms.com; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'self'";
+const SITE_CSP = "default-src 'self'; script-src 'self' " + INLINE_SCRIPT_HASH + "; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://i.ytimg.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://www.google.com https://maps.google.com; connect-src 'self' https://api.web3forms.com; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'self'";
 const ADMIN_CSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://i.ytimg.com; connect-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'";
 
 const BASE_HEADERS = {
@@ -424,6 +473,11 @@ async function handleApi(req, res, pathname) {
   if (pathname === "/api/gallery" && (method === "GET" || method === "HEAD")) {
     return json(req, res, 200, publicGallery(), false);
   }
+  if (pathname === "/api/youtube" && (method === "GET" || method === "HEAD")) {
+    const data = await youtubeFeed();
+    const body = JSON.stringify(data);
+    return send(req, res, 200, body, siteHeaders({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=600" }));
+  }
 
   return json(req, res, 404, { error: "Not found" }, false);
 }
@@ -521,8 +575,22 @@ async function handleAdminApi(req, res, route) {
   if (route === "/settings" && method === "PUT") {
     const body = await readJson(req, 64 * 1024);
     const clean = validateSettings(body);
+    const prev = currentSettings();
+    let warning = "";
+    clean.youtubeChannelId = "";
+    if (clean.youtubeChannel) {
+      if (clean.youtubeChannel === prev.youtubeChannel && prev.youtubeChannelId) clean.youtubeChannelId = prev.youtubeChannelId;
+      else {
+        try { clean.youtubeChannelId = await youtube.resolveChannelId(clean.youtubeChannel); }
+        catch (err) {
+          console.warn("[youtube] could not resolve channel:", err.message);
+          warning = "Saved, but the YouTube channel could not be reached just now, so its latest videos will not show yet. Check the channel link, or save again later.";
+        }
+      }
+    }
     store.settings.write(clean);
-    return json(req, res, 200, currentSettings());
+    ytCache.at = 0;
+    return json(req, res, 200, Object.assign(currentSettings(), warning ? { warning } : {}));
   }
 
   /* gallery */

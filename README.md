@@ -34,7 +34,7 @@ For extra privacy, set `ADMIN_PATH` to something hard to guess, such as `/studio
 | **Dashboard** | See new enquiries at a glance; quick links to common tasks. |
 | **Enquiries** | Every enquiry-form submission is saved here. Filter by status (new, contacted, enrolled, closed), search, add private notes, call, WhatsApp or email the family with one tap, delete, or export to CSV/Excel. |
 | **Gallery** | Upload photos by dragging them in (they're resized automatically), add captions and descriptions, reorder or delete them. New photos appear at the top of the website's Gallery page. |
-| **Settings** | Phone, WhatsApp, email, studio address, class timings, YouTube channel and featured videos, Instagram, Facebook, and the **announcement bar** across the top of every page (e.g. "Admissions open for the December batch"). Changes go live immediately. |
+| **Settings** | Phone, WhatsApp, email, studio address, Google Map (place and link), class timings, YouTube channel and featured videos, Instagram, Facebook, and the **announcement bar** across the top of every page (e.g. "Admissions open for the December batch"). Changes go live immediately. |
 | **Account** | Change the admin password and sign out. |
 
 ### Admin password
@@ -51,6 +51,13 @@ Security features:
 - Login and enquiry rate limits apply.
 - The admin pages use a strict Content Security Policy.
 - Uploads are checked to be genuine JPG, PNG or WebP images.
+
+### YouTube and map
+
+- The **latest videos and Shorts** from the YouTube channel appear automatically on the Home and Gallery pages. The server checks the channel's public feed every hour, so no API key is needed. If YouTube can't be reached, it falls back to the last good copy, or to `public/assets/data/youtube.json`.
+- **Featured videos** (Admin → Settings) are shown first. The first featured video is the large video on the Home and Gallery pages.
+- Videos play in a pop-up on the site. A few videos with licensed music can only be played on YouTube itself, so the pop-up always offers "Watch on YouTube".
+- The **Contact page** shows a Google Map of the studio, with "Get directions" and "Open in Google Maps" buttons.
 
 ## Run it
 

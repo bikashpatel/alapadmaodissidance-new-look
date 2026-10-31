@@ -440,7 +440,9 @@
       phone: input("phone", s.phone, { type: "tel", placeholder: "+91 98765 43210" }),
       whatsapp: input("whatsapp", s.whatsapp, { inputmode: "numeric", placeholder: "919876543210" }),
       email: input("email", s.email, { type: "email", placeholder: "info@alapadmaodissidance.com" }),
-      address: input("address", s.address, { placeholder: "Studio address or city, e.g. Bhubaneswar, Odisha" }),
+      address: input("address", s.address, { placeholder: "Studio address" }),
+      mapQuery: input("mapQuery", s.mapQuery, { placeholder: "e.g. Alapadma Odissi Dance Academy, Bachupally, Hyderabad" }),
+      mapLink: input("mapLink", s.mapLink, { type: "url", placeholder: "https://maps.app.goo.gl/… or https://share.google/…" }),
       hours: input("hours", s.hours, { placeholder: "Mon–Sat · 5:00–8:00 pm IST" }),
       youtubeChannel: input("youtubeChannel", s.youtubeChannel, { type: "url", placeholder: "https://www.youtube.com/@your-channel" }),
       instagram: input("instagram", s.instagram, { type: "url", placeholder: "https://www.instagram.com/…" }),
@@ -492,7 +494,18 @@
           field("WhatsApp number", f.whatsapp, "Digits only, with country code (91 for India). Turns on WhatsApp buttons and WhatsApp enquiries."),
           field("Email", f.email, "Where visitors can write to you."),
           field("Class timings", f.hours, "Shown on the contact page."),
-          field("Studio address", f.address, "Shown in the footer and contact page.", true))),
+          field("Studio address", f.address, "Shown in the footer, home page and contact page.", true))),
+      h("section", { class: "panel" },
+        h("h2", { class: "panel__title", text: "Map" }),
+        h("p", { class: "panel__sub", text: "The Google Map on the contact page, and the “Get directions” and “Open in Google Maps” buttons." }),
+        h("div", { class: "form-grid" },
+          field("Place shown on the map", f.mapQuery, "What Google Maps should search for: your Google business name and area works best.", true),
+          field("Google Maps link", f.mapLink, "From Google Maps: Share → Copy link.", true),
+          h("div", { class: "full" }, h("a", { class: "btn btn--outline btn--sm", href: "#", onclick: function (e) {
+            e.preventDefault();
+            var q = f.mapQuery.value || f.address.value;
+            if (q) window.open("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q), "_blank", "noopener");
+          } }, "Check the place on Google Maps ↗")))),
       h("section", { class: "panel" },
         h("h2", { class: "panel__title", text: "Announcement bar" }),
         h("p", { class: "panel__sub", text: "A slim banner across the top of every page: new batches, workshops, performances, holidays." }),
@@ -504,7 +517,7 @@
           h("div", { class: "full" }, h("span", { class: "field__label", text: "Preview" }), preview))),
       h("section", { class: "panel" },
         h("h2", { class: "panel__title", text: "YouTube & social media" }),
-        h("p", { class: "panel__sub", text: "Add your channel and videos: the website's video sections switch on automatically." }),
+        h("p", { class: "panel__sub", text: "The latest videos and Shorts from your channel appear on the website automatically (checked every hour). Featured videos below are shown first, the first one as the big video on the home and gallery pages." }),
         h("div", { class: "form-grid" },
           field("YouTube channel", f.youtubeChannel, null, true),
           h("div", { class: "field full" }, h("span", { class: "field__label", text: "Featured videos" }), videosEl),
@@ -531,7 +544,7 @@
       };
       api("/settings", { method: "PUT", body: body }).then(function (saved) {
         state.settings = saved;
-        toast("Saved. The website is updated.");
+        if (saved.warning) toast(saved.warning, true); else toast("Saved. The website is updated.");
         renderSettings(view, saved);
       }).catch(function (err) {
         errBox.textContent = err.message;

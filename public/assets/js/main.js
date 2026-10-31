@@ -206,6 +206,16 @@
     phone: function () { return SITE.phone ? "tel:" + SITE.phone.replace(/[^\d+]/g, "") : ""; },
     email: function () { return SITE.email ? "mailto:" + SITE.email : ""; },
     youtube: function () { return SITE.youtubeChannel || ""; },
+    subscribe: function () { return SITE.youtubeChannel ? SITE.youtubeChannel + "?sub_confirmation=1" : ""; },
+    map: function () {
+      if (SITE.mapLink) return SITE.mapLink;
+      var q = SITE.mapQuery || SITE.address;
+      return q ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q) : "";
+    },
+    directions: function () {
+      var q = SITE.mapQuery || SITE.address;
+      return q ? "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(q) : "";
+    },
     instagram: function () { return SITE.instagram || ""; },
     facebook: function () { return SITE.facebook || ""; }
   };
@@ -263,12 +273,161 @@
   $$("[data-youtube-featured]").forEach(function (slot) {
     if (videos.length) { slot.innerHTML = ""; slot.appendChild(liteEmbed(videos[0].id, videos[0].title)); }
   });
+  $$("[data-yt-handle]").forEach(function (el) {
+    var m = /youtube\.com\/(@[\w.-]+)/.exec(SITE.youtubeChannel || "");
+    if (m) el.textContent = m[1];
+  });
+  $$("[data-youtube-featured-title]").forEach(function (el) {
+    if (videos.length && videos[0].title) { el.textContent = videos[0].title; el.hidden = false; }
+  });
   $$("[data-youtube-grid]").forEach(function (grid) {
     if (videos.length > 1) {
       grid.innerHTML = "";
       videos.slice(1).forEach(function (v) { grid.appendChild(liteEmbed(v.id, v.title)); });
       grid.removeAttribute("hidden");
     }
+  });
+
+  /* ---------- latest videos from the YouTube channel ---------- */
+  function fmtMonth(iso) {
+    var d = new Date(iso);
+    return isNaN(d) ? "" : d.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+  }
+  function fmtViews(n) {
+    if (!n) return "";
+    return (n >= 1000 ? (Math.round(n / 100) / 10) + "K" : String(n)) + (n === 1 ? " view" : " views");
+  }
+  function videoCard(v) {
+    var a = doc.createElement("a");
+    a.className = "yt-card" + (v.short ? " yt-card--short" : "");
+    a.href = "https://www.youtube.com/" + (v.short ? "shorts/" : "watch?v=") + v.id;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.setAttribute("data-video", v.id);
+    if (v.short) a.setAttribute("data-video-short", "");
+    a.setAttribute("aria-label", "Play video: " + v.title);
+    var thumb = doc.createElement("span");
+    thumb.className = "yt-card__thumb";
+    var img = doc.createElement("img");
+    img.src = "https://i.ytimg.com/vi/" + v.id + "/hqdefault.jpg";
+    img.alt = "";
+    img.loading = "lazy";
+    img.decoding = "async";
+    thumb.appendChild(img);
+    var play = doc.createElement("span");
+    play.className = "yt-card__play";
+    play.setAttribute("aria-hidden", "true");
+    play.innerHTML = '<svg class="icon"><use href="assets/img/icons.svg#play"></use></svg>';
+    thumb.appendChild(play);
+    if (v.short) {
+      var badge = doc.createElement("span");
+      badge.className = "yt-card__badge";
+      badge.textContent = "Short";
+      thumb.appendChild(badge);
+    }
+    var body = doc.createElement("span");
+    body.className = "yt-card__body";
+    var t = doc.createElement("span");
+    t.className = "yt-card__title";
+    t.textContent = v.title;
+    var meta = doc.createElement("span");
+    meta.className = "yt-card__meta";
+    meta.textContent = [fmtMonth(v.published), fmtViews(v.views)].filter(Boolean).join(" · ");
+    body.appendChild(t);
+    body.appendChild(meta);
+    a.appendChild(thumb);
+    a.appendChild(body);
+    return a;
+  }
+  var ytGrids = $$("[data-yt-latest], [data-yt-shorts]");
+  if (ytGrids.length && window.fetch && SITE.youtubeChannel) {
+    fetch(SITE.youtubeEndpoint || "assets/data/youtube.json", { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !Array.isArray(data.videos)) return;
+        if (!SITE.youtubeEndpoint && data.channelId !== SITE.youtubeChannelId) return; // static snapshot of another channel
+        var featured = videos.map(function (v) { return v.id; });
+        var list = data.videos.filter(function (v) {
+          return v && /^[A-Za-z0-9_-]{11}$/.test(v.id) && featured.indexOf(v.id) === -1;
+        });
+        ytGrids.forEach(function (grid) {
+          var shorts = grid.hasAttribute("data-yt-shorts");
+          var limit = parseInt(grid.getAttribute("data-limit"), 10) || (shorts ? 8 : 6);
+          var items = list.filter(function (v) { return !!v.short === shorts; }).slice(0, limit);
+          if (!items.length) return;
+          while (grid.firstChild) grid.removeChild(grid.firstChild);
+          items.forEach(function (v) { grid.appendChild(videoCard(v)); });
+          var block = grid.closest("[data-yt-block]");
+          if (block) block.hidden = false;
+        });
+      })
+      .catch(function () { /* the featured video and channel links still work */ });
+  }
+
+  /* ---------- video player pop-up ---------- */
+  var vmodal = null, vmodalLast = null;
+  function closeVideo() {
+    if (!vmodal || !vmodal.classList.contains("is-open")) return;
+    var frame = vmodal.querySelector(".video-modal__frame");
+    while (frame.firstChild) frame.removeChild(frame.firstChild); // stops playback
+    vmodal.classList.remove("is-open");
+    doc.body.classList.remove("is-locked");
+    $$("body > *").forEach(function (el) { if (el !== vmodal) el.removeAttribute("inert"); });
+    if (vmodalLast) vmodalLast.focus();
+  }
+  function openVideo(id, isShort, title, trigger) {
+    if (!vmodal) {
+      vmodal = doc.createElement("div");
+      vmodal.className = "video-modal";
+      vmodal.setAttribute("role", "dialog");
+      vmodal.setAttribute("aria-modal", "true");
+      vmodal.innerHTML = '<div class="video-modal__box"><div class="video-modal__frame"></div>' +
+        '<a class="video-modal__yt" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#youtube"></use></svg> Watch on YouTube</a></div>' +
+        '<button class="lightbox__btn video-modal__close" type="button" aria-label="Close video"><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#close"></use></svg></button>';
+      doc.body.appendChild(vmodal);
+      vmodal.querySelector(".video-modal__close").addEventListener("click", closeVideo);
+      vmodal.addEventListener("click", function (e) { if (e.target === vmodal) closeVideo(); });
+      doc.addEventListener("keydown", function (e) { if (e.key === "Escape") closeVideo(); });
+    }
+    vmodalLast = trigger || null;
+    vmodal.setAttribute("aria-label", title || "Video");
+    var frame = vmodal.querySelector(".video-modal__frame");
+    frame.classList.toggle("is-short", !!isShort);
+    var iframe = doc.createElement("iframe");
+    iframe.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id) + "?autoplay=1&rel=0&modestbranding=1";
+    iframe.title = title || "Alapadma Odissi Dance Academy video";
+    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    iframe.allowFullscreen = true;
+    frame.appendChild(iframe);
+    // some videos (e.g. with licensed music) can only be played on YouTube itself
+    vmodal.querySelector(".video-modal__yt").href = "https://www.youtube.com/" + (isShort ? "shorts/" : "watch?v=") + encodeURIComponent(id);
+    vmodal.classList.add("is-open");
+    doc.body.classList.add("is-locked");
+    $$("body > *").forEach(function (el) { if (el !== vmodal) el.setAttribute("inert", ""); });
+    vmodal.querySelector(".video-modal__close").focus();
+  }
+  doc.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("a[data-video]");
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    var id = a.getAttribute("data-video");
+    if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return;
+    e.preventDefault();
+    var label = a.querySelector(".yt-card__title");
+    openVideo(id, a.hasAttribute("data-video-short"), label ? label.textContent : "", a);
+  });
+
+  /* ---------- Google Map ---------- */
+  $$("[data-map-embed]").forEach(function (box) {
+    var q = SITE.mapQuery || SITE.address;
+    if (!q) return;
+    var iframe = doc.createElement("iframe");
+    iframe.src = "https://www.google.com/maps?q=" + encodeURIComponent(q) + "&z=16&output=embed";
+    iframe.title = "Map showing " + q;
+    iframe.loading = "lazy";
+    iframe.referrerPolicy = "no-referrer-when-downgrade";
+    iframe.allowFullscreen = true;
+    box.appendChild(iframe);
+    box.classList.add("is-ready");
   });
 
   /* ---------- enquiry form ---------- */

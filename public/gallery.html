@@ -246,9 +246,23 @@
       <div class="container">
         <div class="section-head reveal">
           <p class="eyebrow">Watch &amp; Be Inspired</p>
-          <h2 class="section-title" id="videos-title">From the stage <em>to the screen</em></h2>
+          <h2 class="section-title" id="videos-title">Watch us <em>on YouTube</em></h2>
           <span class="ornament" aria-hidden="true"></span>
-          <p class="lead">Odissi is meant to be seen in motion. Through our YouTube channel, we share the dance with you, wherever you are.</p>
+          <p class="lead">Odissi is meant to be seen in motion. Performances, practice sessions and student showcases from the academy, shared on our YouTube channel.</p>
+        </div>
+
+        <div class="yt-channel reveal" data-requires="youtubeChannel">
+          <span class="yt-channel__avatar"><img src="assets/img/logo-240.webp" width="240" height="290" alt="" loading="lazy"></span>
+          <div>
+            <p class="yt-channel__kicker"><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#youtube"></use></svg> YouTube channel</p>
+            <h3 class="yt-channel__name">Alapadma</h3>
+            <p class="yt-channel__handle" data-yt-handle>@alapadma6995</p>
+            <p class="yt-channel__desc">Performances, practice sessions and student showcases from Alapadma Odissi Dance Academy.</p>
+          </div>
+          <div class="yt-channel__actions">
+            <a class="btn btn--youtube" href="https://www.youtube.com/@alapadma6995?sub_confirmation=1" data-site-link="subscribe" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#youtube"></use></svg> Subscribe</a>
+            <a class="btn btn--light" href="https://www.youtube.com/@alapadma6995" data-site-link="youtube" target="_blank" rel="noopener">Visit Channel</a>
+          </div>
         </div>
 
         <div class="featured-video reveal reveal--zoom" data-youtube-featured>
@@ -261,12 +275,26 @@
             <span class="video-frame__label" aria-hidden="true"><svg class="icon"><use href="assets/img/icons.svg#youtube"></use></svg> Alapadma on YouTube</span>
           </a>
         </div>
+        <p class="featured-video__caption" data-youtube-featured-title hidden></p>
         <div class="btn-row btn-row--center featured-video__actions reveal">
-          <a class="btn btn--gold" href="gallery.html#videos" data-site-link="youtube" data-requires="youtubeChannel" hidden><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#youtube"></use></svg> Visit our YouTube Channel</a>
-          <span class="soon-pill" data-requires-not="youtubeChannel"><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#youtube"></use></svg> Channel launching soon</span>
+          <span class="soon-pill" data-requires-not="youtubeChannel" hidden><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#youtube"></use></svg> Channel launching soon</span>
         </div>
 
-        <div class="video-grid" data-youtube-grid hidden></div>
+        <div class="yt-block" data-yt-block hidden>
+          <div class="yt-block__head">
+            <h3 class="yt-block__title">Latest videos</h3>
+            <a class="link-arrow" href="https://www.youtube.com/@alapadma6995/videos" target="_blank" rel="noopener">All videos on YouTube <svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#arrow-right"></use></svg></a>
+          </div>
+          <div class="yt-grid" data-yt-latest data-limit="6"></div>
+        </div>
+
+        <div class="yt-block" data-yt-block hidden>
+          <div class="yt-block__head">
+            <h3 class="yt-block__title">Shorts</h3>
+            <a class="link-arrow" href="https://www.youtube.com/@alapadma6995/shorts" target="_blank" rel="noopener">All Shorts <svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#arrow-right"></use></svg></a>
+          </div>
+          <div class="yt-shorts" data-yt-shorts data-limit="10"></div>
+        </div>
 
         <div class="videos-meta">
           <div class="tv-card reveal reveal--left">
@@ -405,7 +433,7 @@
           <li data-requires="phone" hidden><span class="contact-list__icon"><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#phone"></use></svg></span><div><small>Call</small><a href="contact.html" data-site-link="phone" data-site-text="phone">Phone</a></div></li>
           <li data-requires="whatsapp" hidden><span class="contact-list__icon"><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#whatsapp"></use></svg></span><div><small>WhatsApp</small><a href="contact.html" data-site-link="whatsapp">Chat with us</a></div></li>
           <li data-requires="email"><span class="contact-list__icon"><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#mail"></use></svg></span><div><small>Email</small><a href="mailto:info@alapadmaodissidance.com" data-site-link="email" data-site-text="email">info@alapadmaodissidance.com</a></div></li>
-          <li data-requires="address" hidden><span class="contact-list__icon"><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#pin"></use></svg></span><div><small>Studio</small><span class="value" data-site-text="address">Address</span></div></li>
+          <li data-requires="address"><span class="contact-list__icon"><svg class="icon" aria-hidden="true"><use href="assets/img/icons.svg#pin"></use></svg></span><div><small>Studio</small><a href="contact.html#visit" data-site-link="map" data-site-text="address">VSR Classic, #201, Floor 3, Renuka Yellamma Colony, Road No. 8, Bachupally, Hyderabad 500090, Telangana, India</a></div></li>
         </ul>
       </div>
     </div>

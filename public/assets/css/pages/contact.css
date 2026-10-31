@@ -302,3 +302,34 @@
   .contact-close .btn-row .btn { width: 100%; }
   .contact-close__script { font-size: 1.75rem; }
 }
+
+/* ---------- Visit the studio: map + address ---------- */
+.visit-map { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: clamp(1.8rem, 4vw, 3rem); align-items: stretch; max-width: 1140px; margin-inline: auto; }
+.visit-map .map-card { min-height: 440px; }
+.address-card {
+  position: relative; display: flex; flex-direction: column; padding: clamp(1.6rem, 3vw, 2.2rem);
+  background: linear-gradient(180deg, var(--ivory), var(--cream)); border: 1px solid var(--line-gold); border-radius: var(--radius-lg); box-shadow: var(--shadow-md);
+}
+.address-card::after { content: ""; position: absolute; inset: 7px; border: 1px solid rgba(197, 154, 69, 0.2); border-radius: calc(var(--radius-lg) - 6px); pointer-events: none; }
+.address-card__icon {
+  display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 1rem; border-radius: 50%; color: var(--gold-200);
+  background: radial-gradient(circle at 35% 30%, var(--maroon-600), var(--maroon-900)); box-shadow: 0 0 0 4px var(--ivory), 0 0 0 5.5px var(--gold-400);
+}
+.address-card__icon .icon { width: 1.5rem; height: 1.5rem; }
+.address-card__kicker { margin: 0 0 0.3rem; font-family: var(--font-caps); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold-800); }
+.address-card__title { margin: 0 0 0.6rem; font-size: clamp(1.5rem, 2.4vw, 1.8rem); }
+.address-card__address { margin: 0 0 0.8rem; font-size: 1.06rem; line-height: 1.65; color: var(--ink); }
+.address-card__hours { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.8rem; color: var(--ink-soft); }
+.address-card__hours .icon { width: 1.1rem; height: 1.1rem; color: var(--gold-700); }
+.address-card__actions { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 0.7rem; margin: 0.6rem 0 1.4rem; }
+.address-card__online { position: relative; z-index: 1; display: flex; gap: 0.85rem; align-items: flex-start; margin-top: auto; padding-top: 1.2rem; border-top: 1px dashed var(--line-gold); font-size: 0.95rem; color: var(--ink-soft); }
+.address-card__online p { margin: 0; }
+.address-card__online-icon { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%; color: var(--maroon-700); background: var(--gold-100); box-shadow: inset 0 0 0 1px var(--line-gold); }
+.address-card__online-icon .icon { width: 1.15rem; height: 1.15rem; }
+@media (max-width: 900px) {
+  .visit-map { grid-template-columns: 1fr; }
+  .visit-map .map-card { min-height: 340px; }
+}
+@media (max-width: 480px) {
+  .address-card__actions .btn { flex: 1 1 100%; }
+}
