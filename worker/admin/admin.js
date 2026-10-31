@@ -5,7 +5,7 @@
   var API = "api"; // relative to the (secret) admin path
   var STATUSES = ["new", "contacted", "enrolled", "closed"];
   var $ = function (sel, ctx) { return (ctx || document).querySelector(sel); };
-  var state = { enquiries: [], filter: "all", search: "", open: null, settings: null, summary: null };
+  var state = { enquiries: [], next: null, counts: null, filter: "all", search: "", open: null, settings: null, summary: null };
 
   /* ---------- tiny DOM builder (text is always set as text) ---------- */
   function h(tag, props) {
@@ -184,25 +184,45 @@
      Enquiries
      ========================================================================== */
   function viewEnquiries(view) {
-    $("#view-actions").appendChild(h("a", { class: "btn btn--outline btn--sm", href: API + "/enquiries.csv", download: "" }, "Export CSV"));
-    api("/enquiries").then(function (list) {
-      state.enquiries = list;
-      updateNewBadge(list.filter(function (e) { return e.status === "new"; }).length);
+    var actions = $("#view-actions");
+    actions.appendChild(h("button", { class: "btn btn--outline btn--sm", type: "button", onclick: exportCsv }, "Export CSV"));
+    actions.appendChild(h("button", { class: "btn btn--danger btn--sm", type: "button", onclick: function () { deleteClosed(view); } }, "Delete closed"));
+    state.enquiries = []; state.next = null;
+    Promise.all([api("/summary"), fetchPage(true)]).then(function (res) {
+      state.counts = res[0].enquiries;
+      updateNewBadge(state.counts.new);
       renderEnquiries(view);
     }).catch(function (err) { clear(view).appendChild(h("p", { class: "form-error", text: err.message })); });
   }
 
+  // one page (100) of enquiries, newest first, for the current status filter
+  function fetchPage(reset) {
+    var q = [];
+    if (state.filter !== "all") q.push("status=" + encodeURIComponent(state.filter));
+    if (!reset && state.next) q.push("before=" + encodeURIComponent(state.next));
+    return api("/enquiries" + (q.length ? "?" + q.join("&") : "")).then(function (page) {
+      state.enquiries = (reset ? [] : state.enquiries).concat(page.items);
+      state.next = page.next;
+      return page;
+    });
+  }
+
+  function refreshCounts() {
+    return api("/summary").then(function (s) { state.counts = s.enquiries; updateNewBadge(state.counts.new); });
+  }
+
   function renderEnquiries(view) {
     clear(view);
-    var counts = { all: state.enquiries.length };
-    STATUSES.forEach(function (s) { counts[s] = state.enquiries.filter(function (e) { return e.status === s; }).length; });
-
+    var counts = state.counts || { total: 0 };
     var chips = h("div", { class: "chips", role: "group", "aria-label": "Filter by status" });
-    ["all"].concat(STATUSES).forEach(function (s) {
+    ["all"].concat(STATUSES).forEach(function (st) {
       chips.appendChild(h("button", {
-        class: "chip", type: "button", "aria-pressed": String(state.filter === s),
-        onclick: function () { state.filter = s; renderEnquiries(view); }
-      }, (s === "all" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)) + " (" + counts[s] + ")"));
+        class: "chip", type: "button", "aria-pressed": String(state.filter === st),
+        onclick: function () {
+          state.filter = st;
+          fetchPage(true).then(function () { renderEnquiries(view); }).catch(function (err) { toast(err.message, true); });
+        }
+      }, (st === "all" ? "All" : st.charAt(0).toUpperCase() + st.slice(1)) + " (" + (st === "all" ? counts.total : counts[st] || 0) + ")"));
     });
     var search = h("input", { type: "search", placeholder: "Search name, phone, city…", value: state.search, "aria-label": "Search enquiries" });
     search.addEventListener("input", function () { state.search = search.value; renderList(); });
@@ -210,22 +230,66 @@
 
     var listEl = h("div", { class: "list" });
     view.appendChild(listEl);
+    var more = h("div", { class: "btn-row btn-row--center" });
+    view.appendChild(more);
 
     function renderList() {
       clear(listEl);
+      clear(more);
       var q = state.search.trim().toLowerCase();
       var items = state.enquiries.filter(function (e) {
-        if (state.filter !== "all" && e.status !== state.filter) return false;
         if (!q) return true;
         return [e.name, e.phone, e.email, e.city, e.programme, e.message, e.notes].join(" ").toLowerCase().indexOf(q) > -1;
       });
       if (!items.length) {
-        listEl.appendChild(h("p", { class: "empty", text: state.enquiries.length ? "No enquiries match." : "No enquiries yet. When someone fills in the enquiry form on the website it will appear here." }));
-        return;
+        listEl.appendChild(h("p", { class: "empty", text: counts.total ? "No enquiries match." : "No enquiries yet. When someone fills in the enquiry form on the website it will appear here." }));
       }
       items.forEach(function (e) { listEl.appendChild(enquiryCard(e, view)); });
+      if (state.next) {
+        more.appendChild(h("button", { class: "btn btn--outline", type: "button", onclick: function (ev) {
+          ev.target.disabled = true;
+          fetchPage(false).then(renderList).catch(function (err) { toast(err.message, true); ev.target.disabled = false; });
+        } }, "Load more enquiries"));
+        if (q) more.appendChild(h("span", { class: "field__hint", text: "Search covers the enquiries loaded so far." }));
+      }
     }
     renderList();
+  }
+
+  function deleteClosed(view) {
+    var n = (state.counts && state.counts.closed) || 0;
+    if (!n) { toast("There are no closed enquiries to delete."); return; }
+    if (!window.confirm("Delete all " + n + " closed enquiries? Export them first if you want a copy. This cannot be undone.")) return;
+    api("/enquiries?status=closed", { method: "DELETE" }).then(function (r) {
+      toast(r.deleted + " closed enquiries deleted");
+      viewEnquiries(clear(view));
+    }).catch(function (err) { toast(err.message, true); });
+  }
+
+  // CSV is built here in the browser from the paged API (formulas neutralised for spreadsheets)
+  function exportCsv(ev) {
+    var btn = ev && ev.target;
+    if (btn) btn.disabled = true;
+    var cols = [["createdAt", "Received"], ["status", "Status"], ["name", "Name"], ["phone", "Phone"], ["email", "Email"], ["learner", "Learner"],
+      ["programme", "Programme"], ["mode", "Mode"], ["city", "City"], ["time", "Preferred time"], ["message", "Message"], ["notes", "Notes"], ["page", "Page"]];
+    var cell = function (v) {
+      var str = String(v == null ? "" : v);
+      if (/^[=+\-@\t\r]/.test(str.replace(/^\s+/, ""))) str = "'" + str;
+      return '"' + str.replace(/"/g, '""') + '"';
+    };
+    var rows = [cols.map(function (c) { return c[1]; }).join(",")];
+    (function page(before) {
+      return api("/enquiries" + (before ? "?before=" + encodeURIComponent(before) : "")).then(function (p) {
+        p.items.forEach(function (e) { rows.push(cols.map(function (c) { return cell(e[c[0]]); }).join(",")); });
+        return p.next ? page(p.next) : null;
+      });
+    })(null).then(function () {
+      var blob = new Blob(["\uFEFF" + rows.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      var a = h("a", { href: URL.createObjectURL(blob), download: "alapadma-enquiries-" + new Date().toISOString().slice(0, 10) + ".csv" });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+      toast("Exported " + (rows.length - 1) + " enquiries");
+    }).catch(function (err) { toast(err.message, true); }).then(function () { if (btn) btn.disabled = false; });
   }
 
   function waNumber(phone) {
@@ -268,7 +332,8 @@
       api("/enquiries/" + e.id, { method: "PATCH", body: { status: statusSel.value } }).then(function (upd) {
         Object.assign(e, upd);
         toast("Status updated");
-        renderEnquiries(view);
+        if (state.filter !== "all" && e.status !== state.filter) state.enquiries = state.enquiries.filter(function (x) { return x.id !== e.id; });
+        refreshCounts().then(function () { renderEnquiries(view); });
       }).catch(function (err) { toast(err.message, true); statusSel.value = e.status; });
     });
 
@@ -286,7 +351,7 @@
       api("/enquiries/" + e.id, { method: "DELETE" }).then(function () {
         state.enquiries = state.enquiries.filter(function (x) { return x.id !== e.id; });
         toast("Enquiry deleted");
-        renderEnquiries(view);
+        refreshCounts().then(function () { renderEnquiries(view); });
       }).catch(function (err) { toast(err.message, true); });
     } }, "Delete");
 

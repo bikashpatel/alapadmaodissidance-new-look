@@ -25,7 +25,7 @@ There is no server to rent or maintain, and the free plan covers normal traffic.
 
 ## Admin panel
 
-The admin panel lives at a **private address** that you choose, set as the secret `ADMIN_PATH`. It is hidden from visitors:
+The admin panel lives at a **private address** that you choose, set as the secret `ADMIN_PATH`: 16–64 letters, digits, `-` or `_`, for example `/studio-$(openssl rand -hex 8)`. If the secret is missing or too short, the admin panel is switched off rather than falling back to a guessable address. It is hidden from visitors:
 
 - The website has no links to it, and it isn't listed in `robots.txt` or the sitemap.
 - It sends `noindex` headers, so search engines skip it.
@@ -62,7 +62,7 @@ npx wrangler login                       # opens the browser once to authorise t
 npx wrangler d1 create alapadma          # copy the printed database_id into wrangler.jsonc
 npx wrangler d1 migrations apply alapadma --remote
 
-npx wrangler secret put ADMIN_PATH       # e.g. /studio-desk-7381   (keep it private)
+npx wrangler secret put ADMIN_PATH       # e.g. /studio-$(openssl rand -hex 8): 16-64 characters, keep it private
 npx wrangler secret put ADMIN_PASSWORD   # first-time password, at least 10 characters
 
 npx wrangler deploy                      # publishes the Worker and connects the domain
@@ -106,11 +106,19 @@ migrations/                D1 database schema
 wrangler.jsonc             Cloudflare configuration
 ```
 
+## Recommended Cloudflare settings
+
+- In **SSL/TLS → Edge Certificates**, turn on **Always Use HTTPS**.
+- In **Security → WAF**, add a rate-limiting rule for `/api/`, for example 20 requests per minute per IP. It's free, and it adds a second line of defence against spam.
+- If spam enquiries ever become a problem, Cloudflare Turnstile (a free CAPTCHA) can be added to the forms.
+
 ## Security
 
 - **Passwords:** PBKDF2-SHA256, 60,000 iterations by default. The free plan's limit on computing time per request rules out more; on the $5/month Workers plan, set the `PBKDF2_ITERATIONS` variable to `100000`.
 - **Sessions:** HttpOnly, Secure, SameSite=Strict cookies, limited to the admin path. Only a hash of each session token is stored. Sessions end after 2 hours idle or 12 hours in total, and changing the password signs every session out.
-- **Login limits:** 8 attempts per 15 minutes per IP address, plus an overall limit. Enquiry limits are similar. Cloudflare supplies the visitor's real IP address.
+- **Login limits:** 8 attempts per 15 minutes per IP address (IPv6 is grouped by /64), plus an overall limit. A browser that has signed in before gets its own allowance, so a flood of attempts from elsewhere cannot lock you out. Cloudflare supplies the visitor's real IP address.
+- **Enquiry limits:** 6 per 10 minutes per IP, at most 100 saved per hour, and at most 5,000 stored. The admin inbox loads in pages and can delete closed enquiries in bulk.
+- **Daily quotas:** pages and files are served directly by Cloudflare's static hosting, so normal visits don't use the Worker's daily request quota.
 - **Browser protections:** a strict Content Security Policy (the one inline script is allowed only by its hash), HSTS, and same-origin checks on every change made through the API.
 - **Uploads:** photos must be genuine JPG, PNG or WebP files.
 - **CSV export:** spreadsheet formulas are neutralised.

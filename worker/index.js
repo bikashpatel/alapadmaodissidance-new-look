@@ -17,11 +17,13 @@ import adminJs from "./admin/admin.js";
 import siteConfigSource from "../public/assets/js/site-config.js";
 import * as youtube from "./lib/youtube.js";
 import {
-  MIN_PASSWORD_LENGTH, getAdmin, setPassword, verifyPassword, createSession, checkSession, destroySession,
-  rateLimited, rateLimitReset, pruneAuthTables, randomId,
+  MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH, getAdmin, setPassword, verifyPassword, createSession, checkSession, destroySession,
+  createDevice, knownDevice, rateLimited, rateLimitReached, rateLimitReset, pruneAuthTables, randomId,
 } from "./lib/auth.js";
 
 const COOKIE = "alp_session";
+const DEVICE_COOKIE = "alp_device";
+const PAGE_SIZE = 100;
 const MAX_ENQUIRIES = 5000;
 const MAX_IMAGE_BYTES = 1900 * 1024; // D1 rows are limited to 2 MB
 const YT_TTL_MS = 60 * 60 * 1000;
@@ -178,14 +180,25 @@ async function youtubeFeed(env, ctx, origin) {
   let cached = null;
   try { cached = row ? JSON.parse(row.value) : null; } catch (_) { cached = null; }
   if (cached && cached.channelId !== id) cached = null;
+  const now = Date.now();
   if (cached) {
-    if (Date.now() - row.fetched_at > YT_TTL_MS) ctx.waitUntil(refreshYoutube(env, s).catch(err => console.warn("[youtube]", err.message)));
+    if (now - row.fetched_at > YT_TTL_MS) {
+      // only one request claims the refresh; the others keep serving the cached copy
+      const claim = await env.DB.prepare("UPDATE cache SET fetched_at = ?1 WHERE key = 'youtube' AND fetched_at < ?2 RETURNING 1")
+        .bind(now, now - YT_TTL_MS).first();
+      if (claim) ctx.waitUntil(refreshYoutube(env, s).catch(err => console.warn("[youtube]", err.message)));
+    }
     return cached;
   }
+  if (row && now - row.fetched_at < 5 * 60 * 1000) return (await snapshotFeed(env, origin, id)) || empty; // recent failure: back off
   try { return await refreshYoutube(env, s); }
   catch (err) {
     console.warn("[youtube] feed unavailable:", err.message);
-    return (await snapshotFeed(env, origin, id)) || empty;
+    const fallback = (await snapshotFeed(env, origin, id)) || empty;
+    // remember the fallback for a while so every visitor does not trigger another fetch
+    await env.DB.prepare("INSERT INTO cache (key, value, fetched_at) VALUES ('youtube', ?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?1, fetched_at = ?2")
+      .bind(JSON.stringify(fallback), now - YT_TTL_MS + 15 * 60 * 1000).run();
+    return fallback;
   }
 }
 
@@ -221,11 +234,28 @@ function json(url, status, data, { admin = true, cache, cookie } = {}) {
   return res;
 }
 
+async function readBody(request, limit) {
+  if (Number(request.headers.get("content-length") || 0) > limit) throw new HttpError(413, "Request too large");
+  if (!request.body) return new Uint8Array(0);
+  const reader = request.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) { await reader.cancel(); throw new HttpError(413, "Request too large"); }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.byteLength; }
+  return out;
+}
+
 async function readJson(request, limit) {
   if (!/^application\/json\b/i.test(request.headers.get("content-type") || "")) throw new HttpError(415, "Expected JSON");
-  if (Number(request.headers.get("content-length") || 0) > limit) throw new HttpError(413, "Request too large");
-  const buf = await request.arrayBuffer();
-  if (buf.byteLength > limit) throw new HttpError(413, "Request too large");
+  const buf = await readBody(request, limit);
   let v;
   try { v = JSON.parse(new TextDecoder().decode(buf) || "{}"); }
   catch (_) { throw bad("Invalid JSON"); }
@@ -234,16 +264,20 @@ async function readJson(request, limit) {
 }
 
 function clientIp(request) {
-  let ip = request.headers.get("CF-Connecting-IP") || "unknown"; // set by Cloudflare, cannot be spoofed
-  ip = ip.replace(/^::ffff:/, "");
-  if (ip.includes(":")) ip = ip.split(":").slice(0, 4).join(":") + "::/64";
-  return ip;
+  let ip = (request.headers.get("CF-Connecting-IP") || "unknown").toLowerCase(); // set by Cloudflare, cannot be spoofed
+  ip = ip.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, "");
+  if (!ip.includes(":")) return ip;
+  // expand "::" so every address in the same /64 maps to the same key
+  const [head, tail = ""] = ip.split("::");
+  const h = head ? head.split(":") : [], t = tail ? tail.split(":") : [];
+  const groups = ip.includes("::") ? h.concat(Array(Math.max(0, 8 - h.length - t.length)).fill("0"), t) : h;
+  return groups.slice(0, 4).map(g => (g || "0").replace(/^0+(?=.)/, "")).join(":") + "::/64";
 }
 
 function sameOrigin(request, url, { required = false } = {}) {
   const origin = request.headers.get("Origin");
   if (!origin) return !required;
-  try { return new URL(origin).host === url.host; } catch (_) { return false; }
+  try { return new URL(origin).origin === url.origin; } catch (_) { return false; }
 }
 
 function cookieValue(request, name) {
@@ -256,26 +290,23 @@ function cookieValue(request, name) {
   return "";
 }
 
-function sessionCookie(url, adminPath, token, maxAge) {
-  return `${COOKIE}=${token}; Path=${adminPath}/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${url.protocol === "https:" ? "; Secure" : ""}`;
+function sessionCookie(url, adminPath, token, maxAge, name = COOKIE) {
+  return `${name}=${token}; Path=${adminPath}/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${url.protocol === "https:" ? "; Secure" : ""}`;
 }
 
+// The admin panel is only served when ADMIN_PATH is set to a long, hard-to-guess path.
 function adminPathFrom(env) {
-  const p = "/" + String(env.ADMIN_PATH || "/admin").trim().replace(/^\/+|\/+$/g, "");
-  return /^\/[A-Za-z0-9_-]{3,64}$/.test(p) ? p : "/admin";
+  const p = "/" + String(env.ADMIN_PATH || "").trim().replace(/^\/+|\/+$/g, "");
+  return /^\/[A-Za-z0-9_-]{16,64}$/.test(p) ? p : null;
 }
 
 async function notFound(env, url) {
-  // any missing path makes the assets binding return 404.html with status 404
-  const res = await env.ASSETS.fetch(new Request(url.origin + "/__not-found__"));
-  return new Response(res.body, { status: 404, headers: applyHeaders(new Headers(res.headers), siteExtra, url) });
+  // "/404" maps to 404.html (html_handling); served with status 404
+  const res = await env.ASSETS.fetch(new Request(url.origin + "/404"));
+  const headers = applyHeaders(new Headers(res.headers), siteExtra, url);
+  headers.set("Cache-Control", "no-cache");
+  return new Response(res.body, { status: 404, headers });
 }
-
-const csvCell = v => {
-  let s = String(v == null ? "" : v);
-  if (/^[=+\-@\t\r]/.test(s.trimStart())) s = "'" + s; // neutralise spreadsheet formulas
-  return `"${s.replace(/"/g, '""')}"`;
-};
 
 const IMAGE_MAGIC = [
   { mime: "image/jpeg", ext: "jpg", test: b => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
@@ -304,14 +335,15 @@ async function handlePublicApi(request, env, ctx, url, pathname) {
     }
     const body = await readJson(request, 16 * 1024);
     if (str(body.website, 200)) return json(url, 201, { ok: true }, { admin: false }); // honeypot
-    const count = (await db.prepare("SELECT COUNT(*) AS n FROM enquiries").first()).n;
-    if (count >= MAX_ENQUIRIES || await rateLimited(db, "enq:all", 100, 60 * 60 * 1000)) {
+    const e = validateEnquiry(body);
+    const stored = (await db.prepare("SELECT n FROM counters WHERE key = 'enquiries'").first() || { n: 0 }).n;
+    if (stored >= MAX_ENQUIRIES || await rateLimitReached(db, "enq:all", 100, 60 * 60 * 1000)) {
       return json(url, 503, { error: "Our enquiry form is busy right now. Please contact us on WhatsApp or by email" }, { admin: false });
     }
-    const e = validateEnquiry(body);
     await db.prepare(`INSERT INTO enquiries (id, created_at, status, notes, name, phone, email, learner, programme, mode, city, time, message, page)
                       VALUES (?1, ?2, 'new', '', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`)
       .bind(randomId(8), new Date().toISOString(), e.name, e.phone, e.email, e.learner, e.programme, e.mode, e.city, e.time, e.message, e.page).run();
+    await rateLimited(db, "enq:all", 100, 60 * 60 * 1000);
     return json(url, 201, { ok: true }, { admin: false });
   }
   if (pathname === "/api/gallery" && (method === "GET" || method === "HEAD")) {
@@ -334,19 +366,26 @@ async function handleAdminApi(request, env, ctx, url, route, adminPath) {
   if (route === "/login" && method === "POST") {
     const ip = clientIp(request);
     const body = await readJson(request, 4 * 1024);
-    // the attempt is counted before it is checked, so parallel requests cannot slip past the limit
-    if (await rateLimited(db, "login:" + ip, 8, 15 * 60 * 1000) || await rateLimited(db, "login:all", 200, 15 * 60 * 1000)) {
-      return json(url, 429, { error: "Too many attempts. Please wait 15 minutes and try again." });
-    }
+    // Attempts are counted before they are checked, so parallel requests cannot slip past the limit.
+    // A browser that has signed in before has its own allowance, so a flood of attempts from
+    // elsewhere cannot lock the academy out.
+    const device = await knownDevice(db, cookieValue(request, DEVICE_COOKIE));
+    const limited = device
+      ? await rateLimited(db, "login:dev:" + device, 8, 15 * 60 * 1000)
+      : await rateLimited(db, "login:" + ip, 8, 15 * 60 * 1000) || await rateLimited(db, "login:all", 200, 15 * 60 * 1000);
+    if (limited) return json(url, 429, { error: "Too many attempts. Please wait 15 minutes and try again." });
     const admin = await getAdmin(db, env);
     if (!admin) return json(url, 503, { error: "The admin password has not been set up yet." });
     if (!(await verifyPassword(String(body.password || ""), admin.password_hash))) {
       await new Promise(r => setTimeout(r, 400));
       return json(url, 401, { error: "Incorrect password" });
     }
-    await rateLimitReset(db, "login:" + ip);
-    const token = await createSession(db);
-    return json(url, 200, { ok: true }, { cookie: sessionCookie(url, adminPath, token, 12 * 60 * 60) });
+    const token = await createSession(db, admin.updated_at);
+    if (!token) return json(url, 401, { error: "The password was just changed. Please sign in again." });
+    await rateLimitReset(db, device ? "login:dev:" + device : "login:" + ip);
+    const res = json(url, 200, { ok: true }, { cookie: sessionCookie(url, adminPath, token, 12 * 60 * 60) });
+    if (!device) res.headers.append("Set-Cookie", sessionCookie(url, adminPath, await createDevice(db), 400 * 24 * 60 * 60, DEVICE_COOKIE));
+    return res;
   }
 
   const token = cookieValue(request, COOKIE);
@@ -375,17 +414,23 @@ async function handleAdminApi(request, env, ctx, url, route, adminPath) {
 
   /* enquiries */
   if (route === "/enquiries" && method === "GET") {
-    const { results } = await db.prepare("SELECT * FROM enquiries ORDER BY created_at DESC LIMIT ?1").bind(MAX_ENQUIRIES).all();
-    return json(url, 200, results.map(enquiryOut));
+    // newest first, one page at a time: ?status=new&before=<createdAt>|<id>
+    const status = url.searchParams.get("status");
+    const before = (url.searchParams.get("before") || "").split("|");
+    const where = [], vals = [];
+    if (ENQUIRY_STATUSES.includes(status)) { where.push("status = ?"); vals.push(status); }
+    if (before.length === 2 && before[0]) { where.push("(created_at < ? OR (created_at = ? AND id < ?))"); vals.push(before[0], before[0], before[1]); }
+    const sql = `SELECT * FROM enquiries ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created_at DESC, id DESC LIMIT ?`;
+    const { results } = await db.prepare(sql).bind(...vals, PAGE_SIZE + 1).all();
+    const items = results.slice(0, PAGE_SIZE).map(enquiryOut);
+    const last = items[items.length - 1];
+    return json(url, 200, { items, next: results.length > PAGE_SIZE && last ? `${last.createdAt}|${last.id}` : null });
   }
-  if (route === "/enquiries.csv" && method === "GET") {
-    const cols = ["created_at", "status", "name", "phone", "email", "learner", "programme", "mode", "city", "time", "message", "notes", "page"];
-    const { results } = await db.prepare("SELECT * FROM enquiries ORDER BY created_at DESC").all();
-    const rows = [cols.join(",")].concat(results.map(e => cols.map(c => csvCell(e[c])).join(",")));
-    return respond(url, "﻿" + rows.join("\r\n"), 200, {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="alapadma-enquiries-${new Date().toISOString().slice(0, 10)}.csv"`,
-    }, true);
+  if (route === "/enquiries" && method === "DELETE") {
+    if (url.searchParams.get("status") !== "closed") throw bad("Only closed enquiries can be deleted in bulk");
+    // RETURNING gives the real number (meta.changes would also count the counter trigger's updates)
+    const { results } = await db.prepare("DELETE FROM enquiries WHERE status = 'closed' RETURNING id").all();
+    return json(url, 200, { ok: true, deleted: results.length });
   }
   let m = /^\/enquiries\/([a-f0-9]{16})$/.exec(route);
   if (m && method === "PATCH") {
@@ -401,8 +446,8 @@ async function handleAdminApi(request, env, ctx, url, route, adminPath) {
     return row ? json(url, 200, enquiryOut(row)) : json(url, 404, { error: "Enquiry not found" });
   }
   if (m && method === "DELETE") {
-    const r = await db.prepare("DELETE FROM enquiries WHERE id = ?1").bind(m[1]).run();
-    return r.meta.changes ? json(url, 200, { ok: true }) : json(url, 404, { error: "Enquiry not found" });
+    const gone = await db.prepare("DELETE FROM enquiries WHERE id = ?1 RETURNING id").bind(m[1]).first();
+    return gone ? json(url, 200, { ok: true }) : json(url, 404, { error: "Enquiry not found" });
   }
 
   /* settings */
@@ -433,9 +478,11 @@ async function handleAdminApi(request, env, ctx, url, route, adminPath) {
   if (route === "/gallery" && method === "GET") return json(url, 200, await galleryList(db));
   if (route === "/gallery" && method === "POST") {
     if (!sameOrigin(request, url, { required: true })) return json(url, 403, { error: "Forbidden" });
-    if (Number(request.headers.get("content-length") || 0) > MAX_IMAGE_BYTES + 64 * 1024) throw new HttpError(413, "Image is too large");
+    if (!request.headers.get("content-length")) throw new HttpError(411, "Length required");
+    const raw = await readBody(request, MAX_IMAGE_BYTES + 64 * 1024).catch(err => { throw err.status === 413 ? new HttpError(413, "Image is larger than 1.9 MB") : err; });
     let form;
-    try { form = await request.formData(); } catch (_) { throw bad("Please upload a JPG, PNG or WebP image"); }
+    try { form = await new Request(url, { method: "POST", headers: { "Content-Type": request.headers.get("content-type") || "" }, body: raw }).formData(); }
+    catch (_) { throw bad("Please upload a JPG, PNG or WebP image"); }
     const file = form.get("image");
     if (!file || typeof file === "string") throw bad("Please upload a JPG, PNG or WebP image");
     if (file.size > MAX_IMAGE_BYTES) throw new HttpError(413, "Image is larger than 1.9 MB");
@@ -494,8 +541,9 @@ async function handleAdminApi(request, env, ctx, url, route, adminPath) {
     }
     const next = String(body.next || "");
     if (next.length < MIN_PASSWORD_LENGTH) return json(url, 400, { error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters` });
-    await setPassword(db, env, next); // signs out every session
-    const fresh = await createSession(db);
+    if (next.length > MAX_PASSWORD_LENGTH) return json(url, 400, { error: `New password must be at most ${MAX_PASSWORD_LENGTH} characters` });
+    const version = await setPassword(db, env, next); // signs out every session
+    const fresh = await createSession(db, version);
     return json(url, 200, { ok: true }, { cookie: sessionCookie(url, adminPath, fresh, 12 * 60 * 60) });
   }
 
@@ -539,7 +587,7 @@ async function serveUpload(request, env, ctx, url, pathname) {
   if (hit) return hit;
   const row = await env.DB.prepare("SELECT mime, data FROM uploads WHERE file = ?1").bind(name).first();
   if (!row) return notFound(env, url);
-  const res = respond(url, toBytes(row.data), 200, { "Content-Type": row.mime, "Cache-Control": "public, max-age=604800" });
+  const res = respond(url, toBytes(row.data), 200, { "Content-Type": row.mime, "Cache-Control": "public, max-age=3600" });
   ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
   return res;
 }
@@ -554,12 +602,17 @@ async function handle(request, env, ctx) {
   catch (_) { return respond(url, "Bad request", 400, { "Content-Type": "text/plain; charset=utf-8" }); }
   if (pathname.includes("\0")) return respond(url, "Bad request", 400, { "Content-Type": "text/plain; charset=utf-8" });
 
+  if (url.protocol === "http:" && env.ENVIRONMENT === "production") {
+    url.protocol = "https:";
+    return Response.redirect(url.toString(), 301);
+  }
+
   const adminPath = adminPathFrom(env);
 
   if (pathname === "/healthz") return respond(url, "ok\n", 200, { "Content-Type": "text/plain", "Cache-Control": "no-store" });
-  if (pathname.startsWith(adminPath + "/api/")) return handleAdminApi(request, env, ctx, url, pathname.slice((adminPath + "/api").length), adminPath);
+  if (adminPath && pathname.startsWith(adminPath + "/api/")) return handleAdminApi(request, env, ctx, url, pathname.slice((adminPath + "/api").length), adminPath);
   if (pathname.startsWith("/api/")) return handlePublicApi(request, env, ctx, url, pathname);
-  if (pathname === adminPath || pathname.startsWith(adminPath + "/")) return serveAdmin(request, url, pathname, adminPath);
+  if (adminPath && (pathname === adminPath || pathname.startsWith(adminPath + "/"))) return serveAdmin(request, url, pathname, adminPath);
 
   if (request.method !== "GET" && request.method !== "HEAD") return respond(url, "Method not allowed", 405, { Allow: "GET, HEAD" });
 
@@ -576,6 +629,7 @@ async function handle(request, env, ctx) {
   if (/(^|\/)[._]/.test(pathname) || pathname.includes("//") || pathname.includes("\\")) return notFound(env, url);
 
   const res = await env.ASSETS.fetch(request);
+  if (res.status === 404) return notFound(env, url);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers: applyHeaders(new Headers(res.headers), siteExtra, url) });
 }
 

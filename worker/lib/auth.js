@@ -8,6 +8,7 @@
 // free plan's CPU budget. On the paid plan PBKDF2_ITERATIONS can be raised to 100000.
 export const DEFAULT_ITERATIONS = 60000;
 export const MIN_PASSWORD_LENGTH = 10;
+export const MAX_PASSWORD_LENGTH = 1024;
 export const SESSION_IDLE_MS = 2 * 60 * 60 * 1000;   // 2 hours without activity
 export const SESSION_MAX_MS = 12 * 60 * 60 * 1000;   // 12 hours in total
 
@@ -35,7 +36,7 @@ export async function hashPassword(password, iterations = DEFAULT_ITERATIONS) {
 }
 
 export async function verifyPassword(password, stored) {
-  if (typeof password !== "string" || typeof stored !== "string" || password.length > 1024) return false;
+  if (typeof password !== "string" || typeof stored !== "string" || password.length > MAX_PASSWORD_LENGTH) return false;
   const parts = stored.split("$");
   if (parts.length !== 5 || parts[0] !== "pbkdf2" || parts[1] !== "sha256") return false;
   const iterations = Number(parts[2]);
@@ -77,26 +78,48 @@ export async function setPassword(db, env, password) {
 }
 
 /* ---------- sessions ---------- */
-export async function createSession(db) {
+// A session records the password version (admin.updated_at) it was created under and is only
+// inserted if that is still the current version, so a login that raced a password change fails.
+export async function createSession(db, pwAt) {
   const token = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const now = Date.now();
-  await db.prepare("INSERT INTO sessions (token_hash, created, seen) VALUES (?1, ?2, ?2)").bind(await sha256hex(token), now).run();
-  return token;
+  const r = await db.prepare(
+    "INSERT INTO sessions (token_hash, created, seen, pw_at) SELECT ?1, ?2, ?2, ?3 WHERE (SELECT updated_at FROM admin WHERE id = 1) = ?3")
+    .bind(await sha256hex(token), now, pwAt).run();
+  return r.meta.changes ? token : null;
 }
 
 // returns the session row when valid (and refreshes its idle timer), otherwise null
-export async function checkSession(db, token, passwordChangedAt) {
+export async function checkSession(db, token, passwordVersion) {
   if (!token || token.length > 100) return null;
   const hash = await sha256hex(token);
-  const s = await db.prepare("SELECT token_hash, created, seen, failures FROM sessions WHERE token_hash = ?1").bind(hash).first();
+  const s = await db.prepare("SELECT token_hash, created, seen, failures, pw_at FROM sessions WHERE token_hash = ?1").bind(hash).first();
   if (!s) return null;
   const now = Date.now();
-  if (now - s.seen > SESSION_IDLE_MS || now - s.created > SESSION_MAX_MS || s.created < (passwordChangedAt || 0)) {
+  if (now - s.seen > SESSION_IDLE_MS || now - s.created > SESSION_MAX_MS || s.pw_at !== passwordVersion) {
     await db.prepare("DELETE FROM sessions WHERE token_hash = ?1").bind(hash).run();
     return null;
   }
   if (now - s.seen > 60 * 1000) await db.prepare("UPDATE sessions SET seen = ?2 WHERE token_hash = ?1").bind(hash, now).run();
   return s;
+}
+
+/* ---------- trusted devices (browsers that signed in successfully before) ---------- */
+export async function createDevice(db) {
+  const token = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const now = Date.now();
+  await db.prepare("INSERT INTO devices (token_hash, created, seen) VALUES (?1, ?2, ?2)").bind(await sha256hex(token), now).run();
+  return token;
+}
+
+// returns the device hash if the cookie belongs to a known device, otherwise ""
+export async function knownDevice(db, token) {
+  if (!token || token.length > 100) return "";
+  const hash = await sha256hex(token);
+  const d = await db.prepare("SELECT seen FROM devices WHERE token_hash = ?1").bind(hash).first();
+  if (!d) return "";
+  if (Date.now() - d.seen > 24 * 60 * 60 * 1000) await db.prepare("UPDATE devices SET seen = ?2 WHERE token_hash = ?1").bind(hash, Date.now()).run();
+  return hash;
 }
 
 export async function destroySession(db, token) {
@@ -116,6 +139,12 @@ export async function rateLimited(db, key, limit, windowMs) {
   return row.count > limit;
 }
 
+// true when `key` has already reached `limit` within the window (does not count a hit)
+export async function rateLimitReached(db, key, limit, windowMs) {
+  const row = await db.prepare("SELECT start, count FROM rate_limits WHERE key = ?1").bind(key).first();
+  return Boolean(row && Date.now() - row.start <= windowMs && row.count >= limit);
+}
+
 export async function rateLimitReset(db, key) {
   await db.prepare("DELETE FROM rate_limits WHERE key = ?1").bind(key).run();
 }
@@ -125,5 +154,6 @@ export async function pruneAuthTables(db) {
   await db.batch([
     db.prepare("DELETE FROM rate_limits WHERE start < ?1").bind(now - 24 * 60 * 60 * 1000),
     db.prepare("DELETE FROM sessions WHERE seen < ?1 OR created < ?2").bind(now - SESSION_IDLE_MS, now - SESSION_MAX_MS),
+    db.prepare("DELETE FROM devices WHERE seen < ?1").bind(now - 400 * 24 * 60 * 60 * 1000),
   ]);
 }

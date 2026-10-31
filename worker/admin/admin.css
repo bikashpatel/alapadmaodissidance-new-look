@@ -42,6 +42,7 @@ h1, h2, h3 { font-family: var(--font-serif); font-weight: 600; color: var(--maro
 .btn--block { width: 100%; }
 .btn-row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
 .btn-row--between { justify-content: space-between; }
+.btn-row--center { justify-content: center; margin-top: 0.8rem; }
 .mt-1 { margin-top: 1rem; }
 .enq--link { display: block; text-decoration: none; }
 

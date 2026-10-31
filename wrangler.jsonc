@@ -4,25 +4,23 @@
   "main": "worker/index.js",
   "compatibility_date": "2026-10-01",
 
-  // The public website. Static files under /assets/* are served directly by Cloudflare;
-  // everything else (pages, API, admin, uploads, live settings) goes through the Worker.
+  // The public website is served straight from Cloudflare's static hosting (free and unlimited).
+  // The Worker runs only for paths with no static file (pages API, admin, uploads, 404) and for
+  // the live settings script below, so page views do not use the Worker's daily request quota.
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "404-page",
-    "run_worker_first": [
-      "/*",
-      "!/assets/css/*",
-      "!/assets/img/*",
-      "!/assets/data/*",
-      "!/assets/js/main.js",
-      "!/assets/js/pages/*",
-      "!/robots.txt",
-      "!/sitemap.xml",
-      "!/site.webmanifest"
-    ]
+    // "none" so paths without a static file reach the Worker (API, admin, uploads); the Worker
+    // serves 404.html itself for anything else.
+    "not_found_handling": "none",
+    "run_worker_first": ["/assets/js/site-config.js"]
   },
+
+  // Only the custom domains below; no *.workers.dev address and no preview URLs
+  // (preview versions would share the production database and secrets).
+  "workers_dev": false,
+  "preview_urls": false,
 
   // Enquiries, settings, gallery photos, admin password and caches.
   // database_id is filled in by `wrangler d1 create alapadma` (see README).
@@ -30,7 +28,7 @@
     {
       "binding": "DB",
       "database_name": "alapadma",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "9a35cdda-fd54-4618-a669-d3fb7e52bb17",
       "migrations_dir": "migrations"
     }
   ],
@@ -44,7 +42,8 @@
   ],
 
   // ADMIN_PATH and ADMIN_PASSWORD are secrets: `wrangler secret put ADMIN_PATH` (never commit them).
-  "vars": { "PBKDF2_ITERATIONS": "60000" },
+  // ENVIRONMENT is overridden to "development" in .dev.vars for local testing.
+  "vars": { "PBKDF2_ITERATIONS": "60000", "ENVIRONMENT": "production" },
 
   "routes": [
     { "pattern": "alapadmaodissidance.com", "custom_domain": true },

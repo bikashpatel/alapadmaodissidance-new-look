@@ -1,3 +1,5 @@
 # Local development secrets: copy to .dev.vars (never commit .dev.vars)
-ADMIN_PATH=/studio-desk-change-me
+# ADMIN_PATH must be 16-64 letters/digits/- or _ after the slash, e.g. from: openssl rand -hex 12
+ADMIN_PATH=/studio-desk-local-test
 ADMIN_PASSWORD=choose-a-long-password
+ENVIRONMENT=development
