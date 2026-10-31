@@ -1257,7 +1257,8 @@ h2 em, h1 em { font-style: italic; color: var(--gold-600); font-weight: 500; }
 .guru-collage__round { position: absolute; left: 0; bottom: 0; width: 44%; z-index: 2; }
 .guru-collage__round img { object-position: 38% 40%; }
 .guru-collage__script { position: absolute; top: 4%; right: -2%; z-index: 2; font-family: var(--font-script); font-size: clamp(2.2rem, 4vw, 3rem); color: var(--lotus); transform: rotate(-8deg); text-shadow: 0 2px 0 var(--cream); }
-.guru-name { font-family: var(--font-deco); font-weight: 700; font-size: clamp(2.6rem, 5.4vw, 4rem); color: var(--maroon-700); margin-bottom: 0.1em; }
+.guru-name { font-family: var(--font-deco); font-weight: 700; font-size: clamp(2.6rem, 5.4vw, 4rem); color: var(--maroon-700); margin-bottom: 0.1em; line-height: 1.05; }
+.guru-name__surname { display: inline-block; color: var(--gold-600); }
 .guru-role { font-family: var(--font-serif); font-style: italic; font-size: 1.35rem; color: var(--gold-700); margin-bottom: 1.2rem; }
 
 .map-figure { margin: 0; position: relative; }

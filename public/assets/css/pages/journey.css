@@ -287,3 +287,14 @@
 .jr-channels strong { display: block; font-family: var(--font-serif); font-size: 1.15rem; font-weight: 600; line-height: 1.2; }
 .jr-channels span { display: block; font-size: 0.86rem; color: var(--ink-soft); }
 @media (max-width: 480px) { .jr-channels { grid-template-columns: 1fr; } }
+
+/* 2023: performance with a video */
+.jr-event--video { border-color: var(--gold-400); background: linear-gradient(180deg, var(--ivory), var(--gold-100)); }
+.jr-event__watch {
+  display: inline-flex; align-items: center; gap: 0.45rem; min-height: 44px; margin-top: 0.7rem; padding: 0.45rem 1rem;
+  border-radius: 999px; background: #e0453c; color: #fff; text-decoration: none;
+  font-family: var(--font-caps); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  box-shadow: 0 10px 22px -12px rgba(224, 69, 60, 0.8); transition: transform 0.3s var(--ease), background 0.3s;
+}
+.jr-event__watch:hover { background: #c8352d; color: #fff; transform: translateY(-2px); }
+.jr-event__watch .icon { width: 0.95rem; height: 0.95rem; }

@@ -10,12 +10,13 @@
 .guru-hero__title { margin-bottom: 0.15em; line-height: 1; }
 .guru-hero__name {
   display: inline-block; font-family: var(--font-deco); font-weight: 700;
-  font-size: clamp(3.2rem, 8.4vw, 6.8rem); letter-spacing: 0.01em; line-height: 0.95;
+  font-size: clamp(3rem, 7.6vw, 6.2rem); letter-spacing: 0.01em; line-height: 0.98;
   background: linear-gradient(175deg, var(--maroon-600) 10%, var(--maroon-800) 55%, var(--maroon-950) 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 2px 0 rgba(232, 207, 148, 0.9)) drop-shadow(0 12px 18px rgba(85, 19, 38, 0.2));
   padding-bottom: 0.06em;
 }
+.guru-hero__surname { display: block; }
 .guru-hero__role {
   display: block; margin-top: 0.55rem;
   font-family: var(--font-serif); font-style: italic; font-weight: 500;

@@ -412,8 +412,8 @@
     var id = a.getAttribute("data-video");
     if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return;
     e.preventDefault();
-    var label = a.querySelector(".yt-card__title");
-    openVideo(id, a.hasAttribute("data-video-short"), label ? label.textContent : "", a);
+    var label = a.getAttribute("data-video-title") || (a.querySelector(".yt-card__title") || {}).textContent || "";
+    openVideo(id, a.hasAttribute("data-video-short"), label, a);
   });
 
   /* ---------- Google Map ---------- */
