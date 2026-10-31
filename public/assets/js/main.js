@@ -468,6 +468,25 @@
     if (hp) data.website = hp.value;
     return data;
   }
+  // Web3Forms email alert. Sent as FormData so the browser makes a simple request with no
+  // CORS preflight (Web3Forms' bot protection rejects preflight requests).
+  function web3formsData(form, subject, message) {
+    var fd = new FormData();
+    fd.append("access_key", SITE.web3formsKey);
+    fd.append("subject", subject);
+    fd.append("from_name", SITE.name || "Alapadma website");
+    var nameEl = form.querySelector('[name="name"]');
+    var emailEl = form.querySelector('[name="email"]');
+    var phoneEl = form.querySelector('[name="phone"]');
+    if (nameEl && nameEl.value) fd.append("name", nameEl.value.trim());
+    if (emailEl && emailEl.value) fd.append("email", emailEl.value.trim()); // becomes the reply-to address
+    if (phoneEl && phoneEl.value) fd.append("phone", phoneEl.value.trim());
+    fd.append("message", message);
+    return fd;
+  }
+  function sendWeb3forms(fd) {
+    return fetch("https://api.web3forms.com/submit", { method: "POST", body: fd, headers: { Accept: "application/json" } });
+  }
   function recordEnquiry(form) {
     return fetch(SITE.enquiryEndpoint, {
       method: "POST",
@@ -520,13 +539,9 @@
       if (SITE.enquiryEndpoint && window.fetch) {
         var sendBtn = e.submitter;
         if (sendBtn) { sendBtn.disabled = true; sendBtn.setAttribute("aria-busy", "true"); }
-        var notify = SITE.web3formsKey ? { access_key: SITE.web3formsKey, subject: subject, from_name: SITE.name, message: message } : null;
+        var notify = SITE.web3formsKey ? web3formsData(form, subject, message) : null;
         recordEnquiry(form).then(function () {
-          if (notify) {
-            fetch("https://api.web3forms.com/submit", {
-              method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(notify)
-            }).catch(function () {});
-          }
+          if (notify) sendWeb3forms(notify).catch(function () {});
           form.reset();
           setStatus(form, "success", "<strong>Thank you.</strong> Your enquiry has reached us and we will get back to you shortly.");
         }).catch(function (err) {
@@ -538,17 +553,9 @@
       }
 
       if (!via && SITE.web3formsKey) {
-        var data = { access_key: SITE.web3formsKey, subject: subject, from_name: SITE.name, message: message };
-        $$("input, select, textarea", form).forEach(function (el) {
-          if (el.name && (el.type !== "radio" || el.checked) && !el.closest(".hp-field")) data[el.name] = el.value;
-        });
         var btn = e.submitter;
         if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
-        fetch("https://api.web3forms.com/submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify(data)
-        }).then(function (r) { return r.json(); }).then(function (res) {
+        sendWeb3forms(web3formsData(form, subject, message)).then(function (r) { return r.json(); }).then(function (res) {
           if (res && res.success) {
             form.reset();
             setStatus(form, "success", "<strong>Thank you.</strong> Your enquiry has reached us and we will get back to you shortly.");
