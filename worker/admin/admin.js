@@ -304,27 +304,54 @@
   /* ==========================================================================
      Gallery
      ========================================================================== */
+  // Resize in the browser and keep each photo under ~1.5 MB (the database limit is 2 MB per photo)
+  function canvasBlob(c, quality) {
+    return new Promise(function (resolve) { c.toBlob(resolve, "image/jpeg", quality); });
+  }
   function prepareImage(file) {
     return new Promise(function (resolve, reject) {
       if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { reject(new Error(file.name + ": please choose a JPG, PNG or WebP photo")); return; }
       var url = URL.createObjectURL(file);
       var img = new Image();
       img.onload = function () {
-        var max = 1800;
-        var scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-        var w = Math.max(1, Math.round(img.naturalWidth * scale));
-        var hgt = Math.max(1, Math.round(img.naturalHeight * scale));
-        var c = document.createElement("canvas");
-        c.width = w; c.height = hgt;
-        var ctx = c.getContext("2d");
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, w, hgt);
-        ctx.drawImage(img, 0, 0, w, hgt);
         URL.revokeObjectURL(url);
-        resolve({ image: c.toDataURL("image/jpeg", 0.86), width: w, height: hgt });
+        var attempts = [[1800, 0.86], [1600, 0.8], [1400, 0.75], [1200, 0.7], [1000, 0.65]];
+        (function next(i) {
+          var max = attempts[i][0], quality = attempts[i][1];
+          var scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+          var w = Math.max(1, Math.round(img.naturalWidth * scale));
+          var hgt = Math.max(1, Math.round(img.naturalHeight * scale));
+          var c = document.createElement("canvas");
+          c.width = w; c.height = hgt;
+          var ctx = c.getContext("2d");
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, w, hgt);
+          ctx.drawImage(img, 0, 0, w, hgt);
+          canvasBlob(c, quality).then(function (blob) {
+            if (!blob) { reject(new Error(file.name + ": could not process this image")); return; }
+            if (blob.size <= 1.5 * 1024 * 1024 || i === attempts.length - 1) resolve({ blob: blob, width: w, height: hgt });
+            else next(i + 1);
+          });
+        })(0);
       };
       img.onerror = function () { URL.revokeObjectURL(url); reject(new Error(file.name + ": could not read this image")); };
       img.src = url;
+    });
+  }
+
+  function uploadPhoto(img, alt) {
+    var fd = new FormData();
+    fd.append("image", img.blob, "photo.jpg");
+    fd.append("width", String(img.width));
+    fd.append("height", String(img.height));
+    fd.append("alt", alt || "");
+    fd.append("caption", "");
+    return fetch(API + "/gallery", { method: "POST", body: fd, credentials: "same-origin" }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (res.status === 401) { showLogin("Your session has ended. Please sign in again."); throw new Error("Please sign in"); }
+        if (!res.ok) throw new Error(data.error || "Upload failed (" + res.status + ")");
+        return data;
+      });
     });
   }
 
@@ -357,7 +384,7 @@
           return prepareImage(file).then(function (img) {
             line.textContent = "Uploading " + file.name + "…";
             var caption = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
-            return api("/gallery", { method: "POST", body: { image: img.image, width: img.width, height: img.height, caption: "", alt: caption ? "Odissi photograph: " + caption : "" } });
+            return uploadPhoto(img, caption ? "Odissi photograph: " + caption : "");
           }).then(function () {
             line.textContent = "✓ " + file.name + " added";
           }).catch(function (err) { line.textContent = "✗ " + err.message; line.style.color = "#8a1b2e"; });

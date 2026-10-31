@@ -1,4 +1,3 @@
-"use strict";
 /*
  * YouTube channel feed: reads the public RSS feed of the channel (no API key needed)
  * and turns it into a tidy list of videos for the website's video grid.
@@ -21,7 +20,7 @@ function humaniseTag(tag) {
 
 // Titles on the channel often carry hashtags; show a clean, readable title on the website.
 const TAG = /#[\p{L}\p{N}_]+/gu;
-function cleanTitle(raw) {
+export function cleanTitle(raw) {
   const title = decodeEntities(raw).replace(/\s+/g, " ").trim();
   const tidy = s => s.replace(/(^|\s)#(?=\s|$)/g, " ").replace(/\s+/g, " ").replace(/^[\s|·,.:;-]+|[\s|·,.:;-]+$/g, "").trim();
   let clean;
@@ -44,7 +43,7 @@ function cleanTitle(raw) {
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 
-function parseFeed(xml) {
+export function parseFeed(xml) {
   const entries = String(xml).match(/<entry>[\s\S]*?<\/entry>/g) || [];
   const pick = (e, re) => { const m = re.exec(e); return m ? m[1] : ""; };
   return entries.map(e => {
@@ -72,12 +71,12 @@ async function get(url, timeoutMs = 8000) {
   return res.text();
 }
 
-async function fetchChannelVideos(channelId) {
+export async function fetchChannelVideos(channelId) {
   return parseFeed(await get(FEED_URL(channelId)));
 }
 
 // Accepts https://www.youtube.com/@handle, /channel/UC…, youtube.com/c/… and returns the UC… id.
-async function resolveChannelId(channelUrl) {
+export async function resolveChannelId(channelUrl) {
   const direct = /\/channel\/(UC[A-Za-z0-9_-]{22})/.exec(channelUrl || "");
   if (direct) return direct[1];
   if (!channelUrl) return "";
@@ -90,7 +89,7 @@ async function resolveChannelId(channelUrl) {
 }
 
 // Strip tracking parameters (e.g. ?si=…) and normalise to https://www.youtube.com/…
-function normaliseChannelUrl(url) {
+export function normaliseChannelUrl(url) {
   try {
     const u = new URL(url);
     if (!/(^|\.)youtube\.com$/.test(u.hostname)) return url;
@@ -100,4 +99,3 @@ function normaliseChannelUrl(url) {
   }
 }
 
-module.exports = { parseFeed, cleanTitle, fetchChannelVideos, resolveChannelId, normaliseChannelUrl };

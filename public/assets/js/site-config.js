@@ -1,51 +1,39 @@
 /*
- * Alapadma Odissi Dance Academy — site settings
- * ------------------------------------------------------------
- * Edit the values below and every page updates: header/footer
- * contact details, WhatsApp buttons, the enquiry form and the
- * YouTube sections. Leave a value empty ("") to hide the links
- * that depend on it.
+ * Alapadma Odissi Dance Academy: default site settings
+ * ----------------------------------------------------------------------------
+ * On the live site these values are only the starting point: everything can be
+ * changed in the admin panel (Settings), and the server sends the saved values
+ * to the pages. Keep the object below as strict JSON (double quotes, no
+ * comments inside, no trailing commas) because the server reads it.
+ *
+ *   phone           shown as written, e.g. "+91 98765 43210"
+ *   whatsapp        digits with country code, e.g. "919876543210" (turns on WhatsApp buttons)
+ *   email           enquiry email
+ *   address         studio address
+ *   mapQuery        what Google Maps should show on the contact page map
+ *   mapLink         "Open in Google Maps" link
+ *   hours           class timings line, e.g. "Mon–Sat · 5:00–8:00 pm IST"
+ *   youtubeChannel  channel URL; its latest videos appear automatically
+ *   youtubeChannelId  the channel's UC… id (found automatically when saved in the admin panel)
+ *   youtubeVideos   featured videos: [{ "id": "<video id>", "title": "…" }]; the first is the big one
+ *   instagram, facebook  profile URLs
+ *   web3formsKey    set in the admin panel, never here (this file is public)
  */
 window.SITE = {
-  name: "Alapadma Odissi Dance Academy",
-
-  // Phone number shown on the site, e.g. "+91 98765 43210"
-  phone: "",
-
-  // WhatsApp number in international format, digits only, e.g. "919876543210".
-  // When set, enquiries open a pre-filled WhatsApp chat.
-  whatsapp: "",
-
-  // Enquiry email. Tip: create this mailbox for free with Cloudflare Email Routing
-  // (Cloudflare dashboard → alapadmaodissidance.com → Email → Email Routing).
-  email: "info@alapadmaodissidance.com",
-
-  // Studio address
-  address: "VSR Classic, #201, Floor 3, Renuka Yellamma Colony, Road No. 8, Bachupally, Hyderabad 500090, Telangana, India",
-
-  // Google Maps: the place to show on the embedded map, and the "Open in Google Maps" link
-  mapQuery: "Alapadma Odissi Dance Academy, Bachupally, Hyderabad",
-  mapLink: "https://share.google/TGlJ9J4DSczTwzHn7",
-
-  // Class timings line shown on the contact page, e.g. "Mon–Sat · 5:00–8:00 pm IST"
-  hours: "",
-
-  // YouTube channel. The latest videos from it appear on the website automatically.
-  youtubeChannel: "https://www.youtube.com/@alapadma6995",
-  youtubeChannelId: "UCx0JuPxPc09D9oFz8Agts1w",
-
-  // Optional: YouTube videos to feature. Use the ID (the part after "v=" in a
-  // video URL), optionally with a title, e.g. ["dQw4w9WgXcQ"] or
-  // [{ id: "dQw4w9WgXcQ", title: "Mangalacharan" }].
-  // The first one is the featured video on the home and gallery pages.
-  youtubeVideos: [
-    { id: "ZKyyNjJjrek", title: "Astasambhu · Purnima Piyali · Hyderabad Odissi Utsav 2023" }
+  "name": "Alapadma Odissi Dance Academy",
+  "phone": "",
+  "whatsapp": "",
+  "email": "info@alapadmaodissidance.com",
+  "address": "VSR Classic, #201, Floor 3, Renuka Yellamma Colony, Road No. 8, Bachupally, Hyderabad 500090, Telangana, India",
+  "mapQuery": "Alapadma Odissi Dance Academy, Bachupally, Hyderabad",
+  "mapLink": "https://share.google/TGlJ9J4DSczTwzHn7",
+  "hours": "",
+  "youtubeChannel": "https://www.youtube.com/@alapadma6995",
+  "youtubeChannelId": "UCx0JuPxPc09D9oFz8Agts1w",
+  "youtubeVideos": [
+    { "id": "ZKyyNjJjrek", "title": "Astasambhu · Purnima Piyali · Hyderabad Odissi Utsav 2023" }
   ],
-
-  instagram: "",
-  facebook: "",
-
-  // Optional: free access key from https://web3forms.com to receive form
-  // enquiries straight into your inbox (no WhatsApp/email app needed).
-  web3formsKey: ""
+  "instagram": "",
+  "facebook": "",
+  "web3formsKey": ""
 };

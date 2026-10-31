@@ -1,0 +1,55 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "alapadma-odissi-dance",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-01",
+
+  // The public website. Static files under /assets/* are served directly by Cloudflare;
+  // everything else (pages, API, admin, uploads, live settings) goes through the Worker.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": [
+      "/*",
+      "!/assets/css/*",
+      "!/assets/img/*",
+      "!/assets/data/*",
+      "!/assets/js/main.js",
+      "!/assets/js/pages/*",
+      "!/robots.txt",
+      "!/sitemap.xml",
+      "!/site.webmanifest"
+    ]
+  },
+
+  // Enquiries, settings, gallery photos, admin password and caches.
+  // database_id is filled in by `wrangler d1 create alapadma` (see README).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "alapadma",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Hourly: refresh the YouTube feed, tidy expired sessions.
+  "triggers": { "crons": ["17 * * * *"] },
+
+  // Bundle the admin panel and the default settings into the Worker as text.
+  "rules": [
+    { "type": "Text", "globs": ["**/admin/*.html", "**/admin/*.css", "**/admin/*.js", "**/assets/js/site-config.js"], "fallthrough": true }
+  ],
+
+  // ADMIN_PATH and ADMIN_PASSWORD are secrets: `wrangler secret put ADMIN_PATH` (never commit them).
+  "vars": { "PBKDF2_ITERATIONS": "60000" },
+
+  "routes": [
+    { "pattern": "alapadmaodissidance.com", "custom_domain": true },
+    { "pattern": "www.alapadmaodissidance.com", "custom_domain": true }
+  ],
+
+  "observability": { "enabled": true }
+}

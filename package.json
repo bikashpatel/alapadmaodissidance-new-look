@@ -1,0 +1,16 @@
+{
+  "name": "alapadma-odissi-dance",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Alapadma Odissi Dance Academy website and admin panel on Cloudflare Workers + D1",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "db:migrate:local": "wrangler d1 migrations apply alapadma --local",
+    "db:migrate": "wrangler d1 migrations apply alapadma --remote",
+    "deploy": "wrangler d1 migrations apply alapadma --remote && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.156.0"
+  }
+}
