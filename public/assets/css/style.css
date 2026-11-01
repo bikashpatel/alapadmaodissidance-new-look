@@ -1185,10 +1185,24 @@ h2 em, h1 em { font-style: italic; color: var(--gold-600); font-weight: 500; }
 .site-footer__mantra::before, .site-footer__mantra::after { content: ""; flex: 0 1 140px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-500)); }
 .site-footer__mantra::after { background: linear-gradient(90deg, var(--gold-500), transparent); }
 .site-footer__mantra span { font-family: var(--font-caps); font-size: 0.74rem; letter-spacing: 0.4em; text-transform: uppercase; color: var(--gold-300); white-space: nowrap; }
-.site-footer__bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem 1.5rem; padding: 1.2rem 0 1.6rem; font-size: 0.85rem; color: rgba(255, 252, 245, 0.5); border-top: 1px solid rgba(232, 207, 148, 0.08); }
-.site-footer__bottom a { color: rgba(255, 252, 245, 0.65); }
-.site-footer__credit a { color: var(--gold-300); font-weight: 500; letter-spacing: 0.04em; text-decoration: none; }
-.site-footer__credit a:hover { color: var(--gold-200); text-decoration: underline; }
+.site-footer__bottom {
+  display: flex; flex-direction: column; align-items: center; gap: 1.2rem; padding: 1.6rem 0 1.8rem;
+  text-align: center; border-top: 1px solid rgba(232, 207, 148, 0.08);
+}
+.site-footer__credit { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+.site-footer__credit-label {
+  font-family: var(--font-caps); font-size: 0.66rem; font-weight: 600; letter-spacing: 0.3em; text-transform: uppercase; color: var(--gold-500);
+}
+.site-footer__credit-name {
+  font-family: var(--font-serif); font-size: 1.35rem; font-weight: 600; line-height: 1.2; color: var(--gold-300); text-decoration: none;
+  transition: color 0.25s var(--ease);
+}
+.site-footer__credit-name:hover { color: var(--gold-200); text-decoration: underline; text-underline-offset: 4px; }
+.site-footer__credit-tagline { font-family: var(--font-serif); font-style: italic; font-size: 1rem; color: rgba(255, 252, 245, 0.7); }
+.site-footer__copy {
+  margin: 0; padding-top: 1.1rem; width: min(100%, 520px); font-size: 0.85rem; color: rgba(255, 252, 245, 0.55); text-wrap: balance;
+  border-top: 1px solid rgba(232, 207, 148, 0.12);
+}
 @media (max-width: 1000px) { .site-footer__top { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) {
   .site-footer__top { grid-template-columns: 1fr; gap: 2.2rem; }

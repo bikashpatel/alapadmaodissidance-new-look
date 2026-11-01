@@ -125,4 +125,4 @@ wrangler.jsonc             Cloudflare configuration
 
 ---
 
-Designed, developed & maintained by [ELARXSYS.COM](https://elarxsys.com).
+Designed & developed by [Elarxsys AI Hub Pvt. Ltd.](https://elarxsys.com): *Intelligence. Innovation. Impact.*
